@@ -33,11 +33,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private jumpKey!: Phaser.Input.Keyboard.Key;
-  
+  private leftKeyA!: Phaser.Input.Keyboard.Key;
+  private rightKeyD!: Phaser.Input.Keyboard.Key;
+
   private jumpBuffer: number = 0;
   private coyoteTime: number = 0;
   private isJumping: boolean = false;
   private isInvulnerable: boolean = false;
+
+  // Apex hang tracking — brief zero-gravity at jump peak for satisfying arc
+  private apexHangTimer: number = 0;
+  private inApexHang: boolean = false;
+  private originalGravityY: number = 0;
   
   // Event States
   public isHanging: boolean = false;
@@ -78,11 +85,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setCollideWorldBounds(true);
     this.setDepth(20);
     this.setGravityY(PHYSICS.GRAVITY);
-    
+    this.originalGravityY = PHYSICS.GRAVITY;
+
     if (this.body) {
         const body = this.body as Phaser.Physics.Arcade.Body;
         body.setSize(30, 75);
-        body.setOffset(48, 28); 
+        body.setOffset(48, 28);
     }
 
     this.initAnimations();
@@ -246,6 +254,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           scaleX: 0.8, scaleY: 1.2, duration: 150, yoyo: true, ease: 'Sine.easeOut'
       });
       this.coyoteTime = 0;
+      // Reset apex hang so the new arc gets its own hang window
+      this.inApexHang = false;
+      this.apexHangTimer = 0;
   }
 
   private initShieldAura() {
@@ -308,6 +319,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.scene.input.keyboard) {
         this.cursors = this.scene.input.keyboard.createCursorKeys();
         this.jumpKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+        this.leftKeyA = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+        this.rightKeyD = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
     }
     this.scene.input.on('pointerdown', () => { this.isHoldingJump = true; });
     this.scene.input.on('pointerup', () => { this.isHoldingJump = false; });
@@ -412,15 +425,34 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     
     const startX = getPlayerStartX(this.scene.scale.width);
     if (this.isStruggling && onGround && !isTweening) {
-        const wobble = Math.sin(time * 0.015); 
-        const jitter = (Math.random() - 0.5) * 0.05; 
+        const wobble = Math.sin(time * 0.015);
+        const jitter = (Math.random() - 0.5) * 0.05;
         this.setRotation(0.05 + (wobble * 0.05) + jitter);
-        const stepPush = Math.sin(time * 0.02) * 2; 
-        this.x = startX + stepPush; 
+        const stepPush = Math.sin(time * 0.02) * 2;
+        this.x = startX + stepPush;
+    } else if (!onGround && !isTweening) {
+        // Limited mid-air steering — auto-runner identity preserved by capping the offset
+        const leftHeld = this.cursors?.left.isDown || this.leftKeyA?.isDown;
+        const rightHeld = this.cursors?.right.isDown || this.rightKeyD?.isDown;
+
+        if (leftHeld && !rightHeld) body.setVelocityX(-PHYSICS.AIR_NUDGE_SPEED);
+        else if (rightHeld && !leftHeld) body.setVelocityX(PHYSICS.AIR_NUDGE_SPEED);
+        else body.setVelocityX(0);
+
+        const offset = this.x - startX;
+        if (offset < -PHYSICS.AIR_NUDGE_MAX_OFFSET) {
+            this.x = startX - PHYSICS.AIR_NUDGE_MAX_OFFSET;
+            if (body.velocity.x < 0) body.setVelocityX(0);
+        } else if (offset > PHYSICS.AIR_NUDGE_MAX_OFFSET) {
+            this.x = startX + PHYSICS.AIR_NUDGE_MAX_OFFSET;
+            if (body.velocity.x > 0) body.setVelocityX(0);
+        }
     } else {
+        // Grounded: snap back to startX (auto-runner default)
         if (Math.abs(this.x - startX) > 1 && !this.isJumping && !isTweening) {
             this.x = Phaser.Math.Linear(this.x, startX, 0.1);
         }
+        if (onGround) body.setVelocityX(0);
     }
 
     if (this.isShielded) {
@@ -466,6 +498,33 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         if (body.velocity.y < -300 && !isJumpKeyHeld) {
             this.setVelocityY(-300);
         }
+    }
+
+    // --- Apex hang + asymmetric fall curve ---
+    const vy = body.velocity.y;
+    if (!onGround) {
+        if (!this.inApexHang && this.apexHangTimer === 0 && Math.abs(vy) < PHYSICS.APEX_VY_THRESHOLD) {
+            this.inApexHang = true;
+            this.apexHangTimer = PHYSICS.APEX_HANG_MS;
+        }
+
+        if (this.inApexHang) {
+            this.apexHangTimer -= delta;
+            body.setGravityY(0);
+            if (this.apexHangTimer <= 0) {
+                this.inApexHang = false;
+                // apexHangTimer stays at <=0 until landing — prevents re-entry mid-jump
+            }
+        } else if (vy > 0) {
+            body.setGravityY(this.originalGravityY * PHYSICS.FALL_GRAVITY_MULTIPLIER);
+        } else {
+            body.setGravityY(this.originalGravityY);
+        }
+    } else {
+        // Grounded — reset apex state and restore base gravity
+        this.inApexHang = false;
+        this.apexHangTimer = 0;
+        body.setGravityY(this.originalGravityY);
     }
 
     if (onGround && Math.abs(body.velocity.x) > 10 && !isTweening) {

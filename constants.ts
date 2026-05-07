@@ -38,6 +38,18 @@ export const PHYSICS = {
   RUN_SPEED_START: 290, // Slower start so player can read the environment
   COYOTE_TIME: 100,     // ms
   BUFFER_TIME: 150,     // ms
+
+  // Apex hang: brief zero-gravity at the top of the jump arc for a satisfying "floaty" peak
+  APEX_HANG_MS: 70,            // duration of the hang window
+  APEX_VY_THRESHOLD: 80,       // |vy| < this counts as "at apex"
+
+  // Asymmetric fall: descent is heavier than ascent so landings feel snappy
+  FALL_GRAVITY_MULTIPLIER: 1.5,
+
+  // Limited mid-air steering: small horizontal nudge while airborne, capped close to start X
+  // Keeps the auto-runner identity intact — ground movement is NOT affected.
+  AIR_NUDGE_SPEED: 220,        // px/s while airborne with input held
+  AIR_NUDGE_MAX_OFFSET: 80,    // max ±px from startX the player can drift mid-air
 };
 
 /** Distance in meters with no obstacles at run start (tutorial: Nur explains jump first). */
