@@ -66,7 +66,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   
   // Input State
   private isHoldingJump: boolean = false;
-  private wasHoldingJump: boolean = false; 
+  private wasHoldingJump: boolean = false;
+  private isHoldingLeft: boolean = false;
+  private isHoldingRight: boolean = false;
+
+  // Mobile touch UI for L/R drift (mirrors keyboard A/D)
+  private leftTouchButton!: Phaser.GameObjects.Rectangle;
+  private rightTouchButton!: Phaser.GameObjects.Rectangle;
+  private leftTouchIcon!: Phaser.GameObjects.Text;
+  private rightTouchIcon!: Phaser.GameObjects.Text;
 
   // Juice
   private dustEmitter!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -322,8 +330,78 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.leftKeyA = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
         this.rightKeyD = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
     }
-    this.scene.input.on('pointerdown', () => { this.isHoldingJump = true; });
+
+    this.createTouchButtons();
+
+    // Global tap = jump, but skip if the pointer is on a touch button (so L/R taps don't double as jump)
+    this.scene.input.on('pointerdown', (_pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
+        if (currentlyOver.length > 0) return;
+        this.isHoldingJump = true;
+    });
     this.scene.input.on('pointerup', () => { this.isHoldingJump = false; });
+
+    // Reposition touch buttons when canvas resizes (e.g. orientation change)
+    this.scene.scale.on('resize', this.layoutTouchButtons, this);
+  }
+
+  private createTouchButtons() {
+    // Bottom-left cluster (L next to R) so a single thumb handles drift; rest of screen still triggers jump.
+    const SIZE = 84;
+    const BG_COLOR = 0x000000;
+    const BG_ALPHA = 0.3;
+    const STROKE_COLOR = 0xffffff;
+    const STROKE_ALPHA = 0.5;
+
+    this.leftTouchButton = this.scene.add.rectangle(0, 0, SIZE, SIZE, BG_COLOR, BG_ALPHA)
+      .setStrokeStyle(2, STROKE_COLOR, STROKE_ALPHA)
+      .setScrollFactor(0)
+      .setDepth(100)
+      .setInteractive();
+
+    this.leftTouchIcon = this.scene.add.text(0, 0, '◀', {
+        fontSize: '36px',
+        color: '#ffffff',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+
+    this.rightTouchButton = this.scene.add.rectangle(0, 0, SIZE, SIZE, BG_COLOR, BG_ALPHA)
+      .setStrokeStyle(2, STROKE_COLOR, STROKE_ALPHA)
+      .setScrollFactor(0)
+      .setDepth(100)
+      .setInteractive();
+
+    this.rightTouchIcon = this.scene.add.text(0, 0, '▶', {
+        fontSize: '36px',
+        color: '#ffffff',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+
+    this.leftTouchButton.on('pointerdown', () => { this.isHoldingLeft = true; });
+    this.leftTouchButton.on('pointerup', () => { this.isHoldingLeft = false; });
+    this.leftTouchButton.on('pointerout', () => { this.isHoldingLeft = false; });
+
+    this.rightTouchButton.on('pointerdown', () => { this.isHoldingRight = true; });
+    this.rightTouchButton.on('pointerup', () => { this.isHoldingRight = false; });
+    this.rightTouchButton.on('pointerout', () => { this.isHoldingRight = false; });
+
+    this.layoutTouchButtons();
+  }
+
+  private layoutTouchButtons() {
+    if (!this.leftTouchButton || !this.rightTouchButton) return;
+
+    const SIZE = 84;
+    const EDGE_MARGIN = 80;
+    const BOTTOM_MARGIN = 28;
+    const GAP = 48;
+    const H = this.scene.scale.height;
+
+    const cy = H - BOTTOM_MARGIN - SIZE / 2;
+    const leftCx = EDGE_MARGIN + SIZE / 2;
+    const rightCx = EDGE_MARGIN + SIZE + GAP + SIZE / 2;
+
+    this.leftTouchButton.setPosition(leftCx, cy);
+    this.leftTouchIcon.setPosition(leftCx, cy);
+    this.rightTouchButton.setPosition(rightCx, cy);
+    this.rightTouchIcon.setPosition(rightCx, cy);
   }
 
   private initAnimations() {
@@ -432,8 +510,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.x = startX + stepPush;
     } else if (!onGround && !isTweening) {
         // Limited mid-air steering — auto-runner identity preserved by capping the offset
-        const leftHeld = this.cursors?.left.isDown || this.leftKeyA?.isDown;
-        const rightHeld = this.cursors?.right.isDown || this.rightKeyD?.isDown;
+        const leftHeld = this.cursors?.left.isDown || this.leftKeyA?.isDown || this.isHoldingLeft;
+        const rightHeld = this.cursors?.right.isDown || this.rightKeyD?.isDown || this.isHoldingRight;
 
         if (leftHeld && !rightHeld) body.setVelocityX(-PHYSICS.AIR_NUDGE_SPEED);
         else if (rightHeld && !leftHeld) body.setVelocityX(PHYSICS.AIR_NUDGE_SPEED);
@@ -585,7 +663,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.scene.tweens.add({ targets: this, scaleX: 0.9, scaleY: 1.1, duration: 200, yoyo: true, ease: 'Sine.easeOut' });
     (this.scene as { playJump?: () => void }).playJump?.();
     const scene = this.scene as { onPlayerJump?: () => void };
-    if (typeof scene.onPlayerJump === 'function') scene.onPlayerJump();
+    if (typeof scene.onPlayerJump === 'function') scene.onPlayerJump(); 
   }
 
   private createGhost() {
@@ -814,7 +892,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         } else if (type === 'struggle') {
              ctx.fillRect(3, 1, 4, 1);
         } else {
-             ctx.beginPath(); ctx.arc(4, 1, 1.5, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(4, 1, 1.5, 0, Math.PI*2); ctx.fill(); 
         }
         
         ctx.restore();
