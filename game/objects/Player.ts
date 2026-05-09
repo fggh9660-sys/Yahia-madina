@@ -573,8 +573,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     if (this.canVariableJump) {
-        if (body.velocity.y < -300 && !isJumpKeyHeld) {
-            this.setVelocityY(-300);
+        if (body.velocity.y < PHYSICS.VARIABLE_JUMP_CAP && !isJumpKeyHeld) {
+            this.setVelocityY(PHYSICS.VARIABLE_JUMP_CAP);
         }
     }
 
@@ -595,6 +595,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             }
         } else if (vy > 0) {
             body.setGravityY(this.originalGravityY * PHYSICS.FALL_GRAVITY_MULTIPLIER);
+        } else if (vy < 0 && !isJumpKeyHeld) {
+            // Rising but jump released — heavier gravity so short hop feels snappy
+            body.setGravityY(this.originalGravityY * PHYSICS.LOW_JUMP_MULTIPLIER);
         } else {
             body.setGravityY(this.originalGravityY);
         }
@@ -780,7 +783,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         ctx.rotate(scarfRot); 
         ctx.fillStyle = P.SASH;
         ctx.beginPath();
-        ctx.moveTo(0, 0);
+        ctx.moveTo(0, 0); 
         ctx.quadraticCurveTo(-20, 5 + scarfWave, -50, -10 + scarfWave);
         ctx.lineTo(-55, 5 + scarfWave);
         ctx.quadraticCurveTo(-20, 20 + scarfWave, 0, 10);

@@ -159,7 +159,7 @@ export class MainScene extends Phaser.Scene {
     const height = Math.max(10, Math.ceil(this.scale.height));
     this.player = new Player(this, getPlayerStartX(this.scale.width), getPlayerSpawnY(height));
     this.cameras.main.setZoom(GAMEPLAY_CAMERA_ZOOM);
-    this.player.setVariableJump(false);
+    this.player.setVariableJump(true);
 
     // 5. Setup Collisions (needed for safe running after intro)
     this.collisionManager.setupCollisions();
