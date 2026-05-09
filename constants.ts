@@ -46,11 +46,11 @@ export const PHYSICS = {
   // Asymmetric fall: descent is heavier than ascent so landings feel snappy
   FALL_GRAVITY_MULTIPLIER: 1.5,
 
-  // Low-jump gravity multiplier: applied while RISING and jump key released
-  // Together with the velocity cap below, makes tap = short hop, hold = full jump
+  // Low-jump gravity multiplier: applied while RISING and jump key released.
+  // Higher = more aggressive cut. Tuned so tap reads as "shorter proper jump", hold reads as "fuller arc".
   LOW_JUMP_MULTIPLIER: 2.5,
-  // Velocity cap when jump key is released mid-rise (lower = more dramatic short hop)
-  VARIABLE_JUMP_CAP: -200,
+  // Velocity cap when jump key is released mid-rise. Lower = tap shorter.
+  VARIABLE_JUMP_CAP: -600,
 
   // Limited mid-air steering: small horizontal nudge while airborne, capped close to start X
   // Keeps the auto-runner identity intact — ground movement is NOT affected.
