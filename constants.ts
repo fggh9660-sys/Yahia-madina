@@ -32,7 +32,7 @@ export function getPlayerStartX(viewWidth: number): number {
 
 // Physics Tuning - "Variable Height"
 export const PHYSICS = {
-  GRAVITY: 2000,        // Heavy gravity for a snappy 0.7s jump
+  GRAVITY: 1800,        // Slightly lighter than before for a smoother, less heavy feel
   JUMP_FORCE: -800,    // Force calculated to give ~0.7s hang time with the new gravity
   RUN_SPEED: 350,       // Normal/max run speed
   RUN_SPEED_START: 290, // Slower start so player can read the environment
