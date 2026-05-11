@@ -33,11 +33,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private jumpKey!: Phaser.Input.Keyboard.Key;
-  
+  private leftKeyA!: Phaser.Input.Keyboard.Key;
+  private rightKeyD!: Phaser.Input.Keyboard.Key;
+
   private jumpBuffer: number = 0;
   private coyoteTime: number = 0;
   private isJumping: boolean = false;
   private isInvulnerable: boolean = false;
+
+  // Apex hang tracking — brief zero-gravity at jump peak for satisfying arc
+  private apexHangTimer: number = 0;
+  private inApexHang: boolean = false;
+  private originalGravityY: number = 0;
   
   // Event States
   public isHanging: boolean = false;
@@ -59,7 +66,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   
   // Input State
   private isHoldingJump: boolean = false;
-  private wasHoldingJump: boolean = false; 
+  private wasHoldingJump: boolean = false;
+  private isHoldingLeft: boolean = false;
+  private isHoldingRight: boolean = false;
+
+  // Mobile touch UI for L/R drift (mirrors keyboard A/D)
+  private leftTouchButton!: Phaser.GameObjects.Rectangle;
+  private rightTouchButton!: Phaser.GameObjects.Rectangle;
+  private leftTouchIcon!: Phaser.GameObjects.Text;
+  private rightTouchIcon!: Phaser.GameObjects.Text;
 
   // Juice
   private dustEmitter!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -78,11 +93,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setCollideWorldBounds(true);
     this.setDepth(20);
     this.setGravityY(PHYSICS.GRAVITY);
-    
+    this.originalGravityY = PHYSICS.GRAVITY;
+
     if (this.body) {
         const body = this.body as Phaser.Physics.Arcade.Body;
         body.setSize(30, 75);
-        body.setOffset(48, 28); 
+        body.setOffset(48, 28);
     }
 
     this.initAnimations();
@@ -246,6 +262,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           scaleX: 0.8, scaleY: 1.2, duration: 150, yoyo: true, ease: 'Sine.easeOut'
       });
       this.coyoteTime = 0;
+      // Reset apex hang so the new arc gets its own hang window
+      this.inApexHang = false;
+      this.apexHangTimer = 0;
   }
 
   private initShieldAura() {
@@ -308,9 +327,81 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.scene.input.keyboard) {
         this.cursors = this.scene.input.keyboard.createCursorKeys();
         this.jumpKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+        this.leftKeyA = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+        this.rightKeyD = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
     }
-    this.scene.input.on('pointerdown', () => { this.isHoldingJump = true; });
+
+    this.createTouchButtons();
+
+    // Global tap = jump, but skip if the pointer is on a touch button (so L/R taps don't double as jump)
+    this.scene.input.on('pointerdown', (_pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
+        if (currentlyOver.length > 0) return;
+        this.isHoldingJump = true;
+    });
     this.scene.input.on('pointerup', () => { this.isHoldingJump = false; });
+
+    // Reposition touch buttons when canvas resizes (e.g. orientation change)
+    this.scene.scale.on('resize', this.layoutTouchButtons, this);
+  }
+
+  private createTouchButtons() {
+    // Bottom-left cluster (L next to R) so a single thumb handles drift; rest of screen still triggers jump.
+    const SIZE = 84;
+    const BG_COLOR = 0x000000;
+    const BG_ALPHA = 0.3;
+    const STROKE_COLOR = 0xffffff;
+    const STROKE_ALPHA = 0.5;
+
+    this.leftTouchButton = this.scene.add.rectangle(0, 0, SIZE, SIZE, BG_COLOR, BG_ALPHA)
+      .setStrokeStyle(2, STROKE_COLOR, STROKE_ALPHA)
+      .setScrollFactor(0)
+      .setDepth(100)
+      .setInteractive();
+
+    this.leftTouchIcon = this.scene.add.text(0, 0, '◀', {
+        fontSize: '36px',
+        color: '#ffffff',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+
+    this.rightTouchButton = this.scene.add.rectangle(0, 0, SIZE, SIZE, BG_COLOR, BG_ALPHA)
+      .setStrokeStyle(2, STROKE_COLOR, STROKE_ALPHA)
+      .setScrollFactor(0)
+      .setDepth(100)
+      .setInteractive();
+
+    this.rightTouchIcon = this.scene.add.text(0, 0, '▶', {
+        fontSize: '36px',
+        color: '#ffffff',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+
+    this.leftTouchButton.on('pointerdown', () => { this.isHoldingLeft = true; });
+    this.leftTouchButton.on('pointerup', () => { this.isHoldingLeft = false; });
+    this.leftTouchButton.on('pointerout', () => { this.isHoldingLeft = false; });
+
+    this.rightTouchButton.on('pointerdown', () => { this.isHoldingRight = true; });
+    this.rightTouchButton.on('pointerup', () => { this.isHoldingRight = false; });
+    this.rightTouchButton.on('pointerout', () => { this.isHoldingRight = false; });
+
+    this.layoutTouchButtons();
+  }
+
+  private layoutTouchButtons() {
+    if (!this.leftTouchButton || !this.rightTouchButton) return;
+
+    const SIZE = 84;
+    const EDGE_MARGIN = 80;
+    const BOTTOM_MARGIN = 28;
+    const GAP = 48;
+    const H = this.scene.scale.height;
+
+    const cy = H - BOTTOM_MARGIN - SIZE / 2;
+    const leftCx = EDGE_MARGIN + SIZE / 2;
+    const rightCx = EDGE_MARGIN + SIZE + GAP + SIZE / 2;
+
+    this.leftTouchButton.setPosition(leftCx, cy);
+    this.leftTouchIcon.setPosition(leftCx, cy);
+    this.rightTouchButton.setPosition(rightCx, cy);
+    this.rightTouchIcon.setPosition(rightCx, cy);
   }
 
   private initAnimations() {
@@ -412,15 +503,34 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     
     const startX = getPlayerStartX(this.scene.scale.width);
     if (this.isStruggling && onGround && !isTweening) {
-        const wobble = Math.sin(time * 0.015); 
-        const jitter = (Math.random() - 0.5) * 0.05; 
+        const wobble = Math.sin(time * 0.015);
+        const jitter = (Math.random() - 0.5) * 0.05;
         this.setRotation(0.05 + (wobble * 0.05) + jitter);
-        const stepPush = Math.sin(time * 0.02) * 2; 
-        this.x = startX + stepPush; 
+        const stepPush = Math.sin(time * 0.02) * 2;
+        this.x = startX + stepPush;
+    } else if (!onGround && !isTweening) {
+        // Limited mid-air steering — auto-runner identity preserved by capping the offset
+        const leftHeld = this.cursors?.left.isDown || this.leftKeyA?.isDown || this.isHoldingLeft;
+        const rightHeld = this.cursors?.right.isDown || this.rightKeyD?.isDown || this.isHoldingRight;
+
+        if (leftHeld && !rightHeld) body.setVelocityX(-PHYSICS.AIR_NUDGE_SPEED);
+        else if (rightHeld && !leftHeld) body.setVelocityX(PHYSICS.AIR_NUDGE_SPEED);
+        else body.setVelocityX(0);
+
+        const offset = this.x - startX;
+        if (offset < -PHYSICS.AIR_NUDGE_MAX_OFFSET) {
+            this.x = startX - PHYSICS.AIR_NUDGE_MAX_OFFSET;
+            if (body.velocity.x < 0) body.setVelocityX(0);
+        } else if (offset > PHYSICS.AIR_NUDGE_MAX_OFFSET) {
+            this.x = startX + PHYSICS.AIR_NUDGE_MAX_OFFSET;
+            if (body.velocity.x > 0) body.setVelocityX(0);
+        }
     } else {
+        // Grounded: snap back to startX (auto-runner default)
         if (Math.abs(this.x - startX) > 1 && !this.isJumping && !isTweening) {
             this.x = Phaser.Math.Linear(this.x, startX, 0.1);
         }
+        if (onGround) body.setVelocityX(0);
     }
 
     if (this.isShielded) {
@@ -463,9 +573,39 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     if (this.canVariableJump) {
-        if (body.velocity.y < -300 && !isJumpKeyHeld) {
-            this.setVelocityY(-300);
+        if (body.velocity.y < PHYSICS.VARIABLE_JUMP_CAP && !isJumpKeyHeld) {
+            this.setVelocityY(PHYSICS.VARIABLE_JUMP_CAP);
         }
+    }
+
+    // --- Apex hang + asymmetric fall curve ---
+    const vy = body.velocity.y;
+    if (!onGround) {
+        if (!this.inApexHang && this.apexHangTimer === 0 && Math.abs(vy) < PHYSICS.APEX_VY_THRESHOLD) {
+            this.inApexHang = true;
+            this.apexHangTimer = PHYSICS.APEX_HANG_MS;
+        }
+
+        if (this.inApexHang) {
+            this.apexHangTimer -= delta;
+            body.setGravityY(0);
+            if (this.apexHangTimer <= 0) {
+                this.inApexHang = false;
+                // apexHangTimer stays at <=0 until landing — prevents re-entry mid-jump
+            }
+        } else if (vy > 0) {
+            body.setGravityY(this.originalGravityY * PHYSICS.FALL_GRAVITY_MULTIPLIER);
+        } else if (vy < 0 && !isJumpKeyHeld) {
+            // Rising but jump released — heavier gravity so short hop feels snappy
+            body.setGravityY(this.originalGravityY * PHYSICS.LOW_JUMP_MULTIPLIER);
+        } else {
+            body.setGravityY(this.originalGravityY);
+        }
+    } else {
+        // Grounded — reset apex state and restore base gravity
+        this.inApexHang = false;
+        this.apexHangTimer = 0;
+        body.setGravityY(this.originalGravityY);
     }
 
     if (onGround && Math.abs(body.velocity.x) > 10 && !isTweening) {
@@ -526,7 +666,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.scene.tweens.add({ targets: this, scaleX: 0.9, scaleY: 1.1, duration: 200, yoyo: true, ease: 'Sine.easeOut' });
     (this.scene as { playJump?: () => void }).playJump?.();
     const scene = this.scene as { onPlayerJump?: () => void };
-    if (typeof scene.onPlayerJump === 'function') scene.onPlayerJump();
+    if (typeof scene.onPlayerJump === 'function') scene.onPlayerJump(); 
   }
 
   private createGhost() {
@@ -643,7 +783,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         ctx.rotate(scarfRot); 
         ctx.fillStyle = P.SASH;
         ctx.beginPath();
-        ctx.moveTo(0, 0);
+        ctx.moveTo(0, 0); 
         ctx.quadraticCurveTo(-20, 5 + scarfWave, -50, -10 + scarfWave);
         ctx.lineTo(-55, 5 + scarfWave);
         ctx.quadraticCurveTo(-20, 20 + scarfWave, 0, 10);
@@ -755,7 +895,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         } else if (type === 'struggle') {
              ctx.fillRect(3, 1, 4, 1);
         } else {
-             ctx.beginPath(); ctx.arc(4, 1, 1.5, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(4, 1, 1.5, 0, Math.PI*2); ctx.fill(); 
         }
         
         ctx.restore();

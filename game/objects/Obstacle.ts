@@ -25,13 +25,25 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
 
     // CRITICAL: Obstacles must be above background (Negative) and Ground (0)
-    this.setDepth(5); 
+    this.setDepth(5);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
     body.setImmovable(true);
 
     this.setupTypeSpecifics();
+
+    // Pass B telegraphing: gentle fade-in so obstacles don't pop into view.
+    // Skip orb because it has its own glow tween on alpha — they would fight.
+    if (type !== 'orb') {
+      this.alpha = 0;
+      scene.tweens.add({
+        targets: this,
+        alpha: 1,
+        duration: 220,
+        ease: 'Sine.easeOut',
+      });
+    }
   }
 
   private setupTypeSpecifics() {
@@ -43,6 +55,7 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(48, 24);
         body.setOffset(8, 40);
+        this.addIdleTelegraph();
         break;
 
       case 'pillar':
@@ -50,6 +63,7 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(30, 80);
         body.setOffset(17, 16);
+        this.addIdleTelegraph();
         break;
 
       case 'rock':
@@ -57,11 +71,15 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(40, 40);
         body.setOffset(12, 24);
+        this.addIdleTelegraph();
         break;
 
+      // Orb hitbox bug fix (bundled with Pass B):
+      // Old setCircle(18, 15, 15) placed the bounding box at (15,15)..(51,51) on a 48x48 canvas — past the edge.
+      // Centered correctly so the collision shape matches the visible orb.
       case 'orb':
         this.setOrigin(0.5, 0.5);
-        body.setCircle(18, 15, 15);
+        body.setCircle(18, 6, 6);
         this.addFloatAnimation();
         this.addGlowAnimation();
         break;
@@ -84,26 +102,31 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(32, 60);
         body.setOffset(16, 4);
+        this.addIdleTelegraph();
         break;
 
+      // Falcon: subtle red tint to signal "danger" + the off-screen incoming warning fires from SpawnManager.
       case 'falcon':
         this.setOrigin(0.5, 0.5);
         body.setSize(60, 30);
         body.setOffset(18, 30);
-        this.addFloatAnimation(15, 600); 
-        this.moveSpeedModifier = 120; 
+        this.addFloatAnimation(15, 600);
+        this.moveSpeedModifier = 120;
+        this.setTint(0xffcccc);
         break;
 
       case 'cactus':
         this.setOrigin(0.5, 1);
         body.setSize(25, 55);
         body.setOffset(19, 9);
+        this.addIdleTelegraph();
         break;
 
       case 'archway':
         this.setOrigin(0.5, 1);
         body.setSize(40, 85);
-        body.setOffset(44, 43); 
+        body.setOffset(44, 43);
+        this.addIdleTelegraph();
         break;
 
       case 'scorpion':
@@ -140,14 +163,29 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(50, 35);
         body.setOffset(7, 29);
+        this.addIdleTelegraph();
         break;
-        
+
       case 'book_pile':
         this.setOrigin(0.5, 1);
         body.setSize(50, 45); // Roughly the pile size
         body.setOffset(15, 35);
+        this.addIdleTelegraph();
         break;
     }
+  }
+
+  // Pass B: gentle scale pulse for currently-static obstacles so the eye can catch them at speed.
+  // Already-animated types (orb, snake, scorpion, viper, falcon) get their own motion and skip this.
+  private addIdleTelegraph() {
+    this.scene.tweens.add({
+      targets: this,
+      scaleY: { from: 1, to: 1.04 },
+      duration: 1400,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   private addFloatAnimation(distance: number = 20, duration: number = 1500) {

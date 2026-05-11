@@ -32,12 +32,30 @@ export function getPlayerStartX(viewWidth: number): number {
 
 // Physics Tuning - "Variable Height"
 export const PHYSICS = {
-  GRAVITY: 2000,        // Heavy gravity for a snappy 0.7s jump
+  GRAVITY: 1800,        // Slightly lighter than before for a smoother, less heavy feel
   JUMP_FORCE: -800,    // Force calculated to give ~0.7s hang time with the new gravity
   RUN_SPEED: 350,       // Normal/max run speed
   RUN_SPEED_START: 290, // Slower start so player can read the environment
   COYOTE_TIME: 100,     // ms
   BUFFER_TIME: 150,     // ms
+
+  // Apex hang: brief zero-gravity at the top of the jump arc for a satisfying "floaty" peak
+  APEX_HANG_MS: 70,            // duration of the hang window
+  APEX_VY_THRESHOLD: 80,       // |vy| < this counts as "at apex"
+
+  // Asymmetric fall: descent is heavier than ascent so landings feel snappy
+  FALL_GRAVITY_MULTIPLIER: 1.5,
+
+  // Low-jump gravity multiplier: applied while RISING and jump key released.
+  // Higher = more aggressive cut. Tuned so tap reads as "shorter proper jump", hold reads as "fuller arc".
+  LOW_JUMP_MULTIPLIER: 2.5,
+  // Velocity cap when jump key is released mid-rise. Lower = tap shorter.
+  VARIABLE_JUMP_CAP: -600,
+
+  // Limited mid-air steering: small horizontal nudge while airborne, capped close to start X
+  // Keeps the auto-runner identity intact — ground movement is NOT affected.
+  AIR_NUDGE_SPEED: 220,        // px/s while airborne with input held
+  AIR_NUDGE_MAX_OFFSET: 80,    // max ±px from startX the player can drift mid-air
 };
 
 /** Distance in meters with no obstacles at run start (tutorial: Nur explains jump first). */

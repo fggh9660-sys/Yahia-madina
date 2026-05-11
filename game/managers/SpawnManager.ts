@@ -271,6 +271,29 @@ export class SpawnManager {
       this.spawnFlightCollectibles(x, screenH);
   }
 
+  /**
+   * Pass B: incoming-falcon warning chevron at the right edge of the viewport.
+   * Pulses for ~800ms then self-destroys (timed to match the falcon spawn delay).
+   */
+  private createFalconWarning(y: number) {
+      const w = this.scene.scale.width;
+      const warning = this.scene.add.text(w - 36, y, '⚠', {
+          fontSize: '40px',
+          color: '#ff4d4d',
+          fontStyle: 'bold',
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+
+      this.scene.tweens.add({
+          targets: warning,
+          scale: { from: 0.7, to: 1.2 },
+          alpha: { from: 0.6, to: 1 },
+          duration: 200,
+          yoyo: true,
+          repeat: 3,
+          onComplete: () => warning.destroy(),
+      });
+  }
+
   private spawnSpecific(pattern: string, x: number, groundY: number) {
       this.applySpawnLogic(pattern, x, groundY);
   }
@@ -568,11 +591,18 @@ export class SpawnManager {
               this.addStar(x, groundY - 180);
               baseDelay = 1800;
               break;
-          case 'FALCON':
+          case 'FALCON': {
+               // Pass B: off-screen warning chevron pulses for 800ms before the falcon actually enters.
+               // Falcon is the fastest threat (base scroll + 120 px/s modifier), so blind-spawning gave players
+               // no reaction window. Now: warning -> 800ms -> falcon spawn.
                const birdY = groundY - Phaser.Math.Between(120, 180);
-               this.obstacles.add(new Obstacle(this.scene, x, birdY, 'falcon'));
-               baseDelay = 1800;
+               this.createFalconWarning(birdY);
+               this.scene.time.delayedCall(800, () => {
+                   this.obstacles.add(new Obstacle(this.scene, x, birdY, 'falcon'));
+               });
+               baseDelay = 2400;
                break;
+           }
           case 'FREE_STARS':
               for(let i=0; i<5; i++) this.addStar(x + (i*60), groundY - 120 - (Math.sin(i)*40));
               baseDelay = 1800;
