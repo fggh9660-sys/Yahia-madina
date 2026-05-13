@@ -1,5 +1,13 @@
 
 import Phaser from 'phaser';
+import { SKILL } from '../../constants';
+
+/** Smallest axis-aligned distance between two arcade bodies. 0 = overlap, positive = gap in px. */
+function aabbDistance(a: Phaser.Physics.Arcade.Body, b: Phaser.Physics.Arcade.Body): number {
+  const dx = Math.max(0, Math.max(a.x - (b.x + b.width), b.x - (a.x + a.width)));
+  const dy = Math.max(0, Math.max(a.y - (b.y + b.height), b.y - (a.y + a.height)));
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
 export type ObstacleType = 'spikes' | 'rock' | 'pillar' | 'orb' | 'snake' | 'wall' | 'falcon' | 'cactus' | 'archway' | 'scorpion' | 'viper' | 'arfaj' | 'book_pile'
   | 'pillar_city' | 'rock_city' | 'spikes_city';
@@ -16,6 +24,12 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
 
   private obstacleType: ObstacleType;
   private moveSpeedModifier: number = 0;
+
+  // Near-miss tracking (sub-slice 1 of skill depth phase)
+  private closestDistance: number = Number.POSITIVE_INFINITY;
+  private nearMissResolved: boolean = false;
+  /** Set externally by CollisionManager when the player actually hits this obstacle. */
+  public wasHit: boolean = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, type: ObstacleType) {
     super(scene, x, y, `obs_${type}`);
@@ -211,8 +225,31 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
   }
 
   update(speed: number) {
-    this.x -= (speed + (this.moveSpeedModifier * (speed/350)));
-    
+    this.x -= (speed + (this.moveSpeedModifier * (speed / 350)));
+
+    // Near-miss tracking — runs while obstacle is in the play area
+    if (!this.nearMissResolved && this.body) {
+      const sceneAny = this.scene as Phaser.Scene & { player?: { x: number; body?: Phaser.Physics.Arcade.Body } };
+      const player = sceneAny.player;
+      if (player && player.body) {
+        const d = aabbDistance(player.body, this.body as Phaser.Physics.Arcade.Body);
+        if (d < this.closestDistance) this.closestDistance = d;
+
+        // When the obstacle's right edge has cleared past the player's left edge by the threshold,
+        // it counts as "passed". Time to decide near-miss vs not.
+        const obstacleRight = this.body.x + this.body.width;
+        const playerLeft = player.body.x;
+        if (obstacleRight < playerLeft - SKILL.NEAR_MISS_PASS_THRESHOLD_PX) {
+          this.nearMissResolved = true;
+          // Only fire near-miss if we never overlapped AND no actual damage was recorded.
+          if (!this.wasHit && this.closestDistance > 0 && this.closestDistance < SKILL.NEAR_MISS_THRESHOLD) {
+            const handler = (this.scene as Phaser.Scene & { onNearMiss?: (x: number, y: number, obstacle?: Obstacle) => void }).onNearMiss;
+            if (typeof handler === 'function') handler.call(this.scene, this.x, this.y, this);
+          }
+        }
+      }
+    }
+
     if (this.x < -100) {
       this.destroy();
     }

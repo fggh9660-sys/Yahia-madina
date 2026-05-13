@@ -58,6 +58,23 @@ export const PHYSICS = {
   AIR_NUDGE_MAX_OFFSET: 80,    // max ±px from startX the player can drift mid-air
 };
 
+// Skill depth — near-miss detection & reward
+// Phase 1 (sub-slice 1): obstacle passes within this distance of the player without overlap = near-miss
+export const SKILL = {
+  /** Distance threshold (px) for near-miss. Smaller = harder to trigger. */
+  NEAR_MISS_THRESHOLD: 28,
+  /** Score bonus awarded per near-miss event. */
+  NEAR_MISS_BONUS: 5,
+  /** Duration (ms) of the slow-mo / hit-stop window on a near-miss. */
+  NEAR_MISS_SLOWMO_MS: 130,
+  /** Time-scale during slow-mo (1 = normal, 0.5 = half speed). */
+  NEAR_MISS_SLOWMO_SCALE: 0.4,
+  /** Camera zoom punch amount on near-miss (1 = no change). */
+  NEAR_MISS_ZOOM_PUNCH: 1.04,
+  /** How far ahead/behind the player an obstacle has to travel to "count as passed". */
+  NEAR_MISS_PASS_THRESHOLD_PX: 30,
+};
+
 /** Distance in meters with no obstacles at run start (tutorial: Nur explains jump first). */
 export const INTRO_SAFE_DISTANCE_M = 22;
 

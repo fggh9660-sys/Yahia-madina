@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PROGRESS, getPlayerStartX, GAMEPLAY_CAMERA_ZOOM, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PROGRESS, SKILL, getPlayerStartX, GAMEPLAY_CAMERA_ZOOM, getPlayerSpawnY } from '../../constants';
 import { Player } from '../objects/Player';
 import { Obstacle } from '../objects/Obstacle';
 import { Question, GameState, NoorMessage, StageResultsData, ActivePuzzle, PuzzleType } from '../../types';
@@ -713,6 +713,66 @@ export class MainScene extends Phaser.Scene {
   
   public addScore(amount: number) {
       this.collectedStarsCount += amount;
+  }
+
+  /**
+   * Skill depth — Sub-slice 1: Near-miss event.
+   * Called by Obstacle when it passes the player within SKILL.NEAR_MISS_THRESHOLD
+   * without ever overlapping. Rewards courage with a small score bonus, audio cue,
+   * a camera zoom punch, a brief slow-mo / hit-stop, and a flash on the obstacle itself.
+   */
+  public onNearMiss(x: number, y: number, obstacle?: Phaser.GameObjects.Sprite) {
+      if (this.isGameOver || this.isPausedMenu) return;
+      if (this.eventManager?.eventPhase === 'STAGE_2_INTRO' || this.eventManager?.eventPhase === 'LEVEL_TRANSITION') return;
+
+      // 1. Score bonus
+      this.addScore(SKILL.NEAR_MISS_BONUS);
+
+      // 2. Floating text — anchored near the player (obstacle has already drifted off to the
+      // left by the time near-miss resolves, so spawning at obstacle.x reads as too far left).
+      // Lifted well above ground and depth-pinned above all overlays.
+      const anchorX = this.player ? this.player.x - 20 : x + 40;
+      const nearText = this.add.text(anchorX, y - 70, `+${SKILL.NEAR_MISS_BONUS} NEAR!`, {
+          fontFamily: 'Cairo', fontSize: '20px', fontStyle: 'bold',
+          color: '#00f2ff', stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(400);
+      this.tweens.add({ targets: nearText, y: y - 130, alpha: 0, duration: 900, onComplete: () => nearText.destroy() });
+
+      // 3. Flash the obstacle that triggered the near-miss so the player knows WHICH one
+      if (obstacle) {
+          const sprite = obstacle as Phaser.GameObjects.Sprite & {
+              setTint?: (color: number) => void;
+              clearTint?: () => void;
+          };
+          sprite.setTint?.(0x00f2ff);
+          this.time.delayedCall(220, () => {
+              sprite.clearTint?.();
+          });
+      }
+
+      // 4. Camera zoom punch
+      const cam = this.cameras.main;
+      const baseZoom = cam.zoom;
+      this.tweens.add({
+          targets: cam,
+          zoom: baseZoom * SKILL.NEAR_MISS_ZOOM_PUNCH,
+          duration: 60,
+          yoyo: true,
+          ease: 'Sine.easeOut',
+      });
+
+      // 5. Brief slow-mo via scroll-speed scaling — auto-restore after window
+      const prevSpeed = this.getGameSpeed();
+      this.setGameSpeed(prevSpeed * SKILL.NEAR_MISS_SLOWMO_SCALE);
+      this.time.delayedCall(SKILL.NEAR_MISS_SLOWMO_MS, () => {
+          // Only restore if no other system has overridden it in the meantime.
+          if (this.getGameSpeed() === prevSpeed * SKILL.NEAR_MISS_SLOWMO_SCALE) {
+              this.setGameSpeed(prevSpeed);
+          }
+      });
+
+      // 6. Audio cue — placeholder: reuse the existing star SFX. Final near-miss SFX to come later.
+      this.audioManager?.playStar();
   }
 
   public addHeart(): boolean {

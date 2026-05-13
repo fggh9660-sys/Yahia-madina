@@ -142,6 +142,13 @@ export class CollisionManager {
   private handleHitObstacle(player: any, obstacle: any) {
     const p = player as Player;
     const tookDamage = p.takeDamage(() => {});
+
+    // Mark the obstacle as physically contacted so its near-miss check won't fire later.
+    // Even if no damage was taken (shield/invulnerable), the player passed THROUGH, not NEAR.
+    if (obstacle && typeof obstacle === 'object' && 'wasHit' in obstacle) {
+        (obstacle as { wasHit: boolean }).wasHit = true;
+    }
+
     if (tookDamage) {
         this.scene.damagePlayer();
         this.scene.cameras.main.shake(200, 0.015);
