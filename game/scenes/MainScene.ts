@@ -1,6 +1,7 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, getPlayerStartX, GAMEPLAY_CAMERA_ZOOM, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, getPlayerStartX, GAMEPLAY_CAMERA_ZOOM, getPlayerSpawnY } from '../../constants';
+import { NOOR_BOND_REWARDS, getBondTier, getBondTierDef, getNextTierThreshold, getCurrentTierFloor } from '../../data/noorBond';
 import { Player } from '../objects/Player';
 import { Obstacle } from '../objects/Obstacle';
 import { Question, GameState, NoorMessage, StageResultsData, ActivePuzzle, PuzzleType } from '../../types';
@@ -66,6 +67,16 @@ export class MainScene extends Phaser.Scene {
   private comboCount: number = 0;
   private comboTier: number = 1;
   private comboHudText: Phaser.GameObjects.Text | null = null;
+
+  // Skill depth — sub-slice 4: Noor bond meter state (per-run; persistence is a slice 5/post-trial concern)
+  private bondPoints: number = 0;
+  private bondTier: number = 0;
+  private bondHudBg: Phaser.GameObjects.Graphics | null = null;
+  private bondHudFill: Phaser.GameObjects.Graphics | null = null;
+  private bondHudLabel: Phaser.GameObjects.Text | null = null;
+
+  private speedLinesTop: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
+  private speedLinesBottom: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
   // UI State
   private activeMessage: string | null = null; 
@@ -178,7 +189,13 @@ export class MainScene extends Phaser.Scene {
     this.scale.on('resize', this.handleResize, this);
     this.input.on('pointerdown', this.handleGlobalTap, this);
 
-    // 8. Nur intro at center (cinematic), then start running
+    // 8. Show the empty bond meter from the start so player learns it exists before earning points.
+    this.updateBondHud();
+
+    // 9. Speed lines emitters (subtle motion streaks scaled by combo tier).
+    this.initSpeedLines();
+
+    // 10. Nur intro at center (cinematic), then start running
     this.startNurIntro();
   }
 
@@ -373,6 +390,13 @@ export class MainScene extends Phaser.Scene {
     this.comboTier = 1;
     // Reference is stale after scene.restart() destroys the old GameObject; let updateComboHud recreate.
     this.comboHudText = null;
+    this.bondPoints = 0;
+    this.bondTier = 0;
+    this.bondHudBg = null;
+    this.bondHudFill = null;
+    this.bondHudLabel = null;
+    this.speedLinesTop = null;
+    this.speedLinesBottom = null;
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
@@ -733,12 +757,28 @@ export class MainScene extends Phaser.Scene {
       if (this.isGameOver || this.isPausedMenu) return;
       if (this.eventManager?.eventPhase === 'STAGE_2_INTRO' || this.eventManager?.eventPhase === 'LEVEL_TRANSITION') return;
 
+      this.bumpCombo();
+      this.addBondPoints(wasNearMiss ? NOOR_BOND_REWARDS.NEAR_MISS : NOOR_BOND_REWARDS.CLEAN_CLEAR);
+
+      if (wasNearMiss) this.fireNearMissJuice(x, y, obstacle);
+  }
+
+  /**
+   * Single source of truth for combo +1. Updates state, refreshes HUD, and awards a bond
+   * milestone if the tier just crossed up.
+   */
+  private bumpCombo() {
       const prevTier = this.comboTier;
       this.comboCount += 1;
       this.comboTier = this.computeComboTier(this.comboCount);
-      this.updateComboHud(this.comboTier !== prevTier);
-
-      if (wasNearMiss) this.fireNearMissJuice(x, y, obstacle);
+      const tierChanged = this.comboTier !== prevTier;
+      this.updateComboHud(tierChanged);
+      this.player?.setComboAuraTier?.(this.comboTier);
+      if (tierChanged) this.setSpeedLinesTier(this.comboTier);
+      if (tierChanged && this.comboTier > prevTier) {
+          this.addBondPoints(NOOR_BOND_REWARDS.COMBO_TIER_UP);
+          this.hitStop(HITSTOP.TIER_UP_MS, HITSTOP.TIER_UP_SCALE);
+      }
   }
 
   /** Map combo count → tier index (1-based). */
@@ -759,6 +799,8 @@ export class MainScene extends Phaser.Scene {
       this.comboCount = 0;
       this.comboTier = 1;
       this.updateComboHud(false);
+      this.player?.setComboAuraTier?.(1);
+      this.setSpeedLinesTier(1);
   }
 
   private updateComboHud(tierChanged: boolean) {
@@ -784,14 +826,16 @@ export class MainScene extends Phaser.Scene {
       this.comboHudText.setVisible(true);
       this.comboHudText.setText(`COMBO ×${this.getComboMultiplier()}`);
       this.comboHudText.setColor(COMBO.TIER_COLORS[this.comboTier - 1]);
-      if (tierChanged) {
-          this.tweens.add({
-              targets: this.comboHudText,
-              scale: { from: 1.5, to: 1 },
-              duration: 250,
-              ease: 'Back.easeOut',
-          });
-      }
+      this.tweens.killTweensOf(this.comboHudText);
+      const pulseScale = tierChanged ? COMBO.TIER_UP_PULSE_SCALE : COMBO.TICK_PULSE_SCALE;
+      const pulseMs = tierChanged ? COMBO.TIER_UP_PULSE_MS : COMBO.TICK_PULSE_MS;
+      this.comboHudText.setScale(1);
+      this.tweens.add({
+          targets: this.comboHudText,
+          scale: { from: pulseScale, to: 1 },
+          duration: pulseMs,
+          ease: tierChanged ? 'Back.easeOut' : 'Sine.easeOut',
+      });
   }
 
   /**
@@ -802,55 +846,99 @@ export class MainScene extends Phaser.Scene {
       const multiplier = this.getComboMultiplier();
       const bonus = SKILL.NEAR_MISS_BONUS * multiplier;
 
-      // 1. Score bonus (scaled by combo)
       this.addScore(bonus);
 
-      // 2. Floating text — anchored near the player (obstacle has already drifted off to the
-      // left by the time near-miss resolves, so spawning at obstacle.x reads as too far left).
-      // Lifted well above ground and depth-pinned above all overlays.
       const anchorX = this.player ? this.player.x - 20 : x + 40;
-      const label = multiplier > 1 ? `+${bonus} NEAR! ×${multiplier}` : `+${bonus} NEAR!`;
-      const nearText = this.add.text(anchorX, y - 70, label, {
-          fontFamily: 'Cairo', fontSize: '20px', fontStyle: 'bold',
-          color: COMBO.TIER_COLORS[this.comboTier - 1], stroke: '#000', strokeThickness: 3
-      }).setOrigin(0.5).setDepth(400);
-      this.tweens.add({ targets: nearText, y: y - 130, alpha: 0, duration: 900, onComplete: () => nearText.destroy() });
+      const label = multiplier > 1 ? `+${bonus} NEAR ×${multiplier}` : `+${bonus} NEAR`;
+      const nearText = this.add.text(anchorX, y - 60, label, {
+          fontFamily: 'Cairo', fontSize: '14px', fontStyle: 'bold',
+          color: COMBO.TIER_COLORS[this.comboTier - 1], stroke: '#000', strokeThickness: 2,
+      }).setOrigin(0.5).setDepth(400).setAlpha(0.9);
+      this.tweens.add({ targets: nearText, y: y - 100, alpha: 0, duration: 700, onComplete: () => nearText.destroy() });
 
-      // 3. Flash the obstacle that triggered the near-miss so the player knows WHICH one
       if (obstacle) {
           const sprite = obstacle as Phaser.GameObjects.Sprite & {
               setTint?: (color: number) => void;
               clearTint?: () => void;
           };
           sprite.setTint?.(0x00f2ff);
-          this.time.delayedCall(220, () => {
+          this.time.delayedCall(180, () => {
               sprite.clearTint?.();
           });
       }
 
-      // 4. Camera zoom punch
-      const cam = this.cameras.main;
-      const baseZoom = cam.zoom;
-      this.tweens.add({
-          targets: cam,
-          zoom: baseZoom * SKILL.NEAR_MISS_ZOOM_PUNCH,
-          duration: 60,
-          yoyo: true,
-          ease: 'Sine.easeOut',
-      });
+      this.cameras.main.shake(
+          SKILL.NEAR_MISS_SHAKE_MS,
+          new Phaser.Math.Vector2(SKILL.NEAR_MISS_SHAKE_INTENSITY_X, 0),
+      );
 
-      // 5. Brief slow-mo via scroll-speed scaling — auto-restore after window
-      const prevSpeed = this.getGameSpeed();
-      this.setGameSpeed(prevSpeed * SKILL.NEAR_MISS_SLOWMO_SCALE);
-      this.time.delayedCall(SKILL.NEAR_MISS_SLOWMO_MS, () => {
-          // Only restore if no other system has overridden it in the meantime.
-          if (this.getGameSpeed() === prevSpeed * SKILL.NEAR_MISS_SLOWMO_SCALE) {
-              this.setGameSpeed(prevSpeed);
-          }
-      });
-
-      // 6. Audio cue — placeholder star SFX with combo-tier pitch escalation.
       this.audioManager?.playStarPitched(COMBO.TIER_DETUNE[this.comboTier - 1]);
+  }
+
+  private hitStop(durationMs: number, scale: number) {
+      const prevSpeed = this.getGameSpeed();
+      const target = prevSpeed * scale;
+      this.setGameSpeed(target);
+      this.time.delayedCall(durationMs, () => {
+          if (this.getGameSpeed() === target) this.setGameSpeed(prevSpeed);
+      });
+  }
+
+  private initSpeedLines() {
+      const TEX_KEY = 'speed_streak';
+      if (!this.textures.exists(TEX_KEY)) {
+          const canvas = this.textures.createCanvas(TEX_KEY, SPEED_LINES.STREAK_W, SPEED_LINES.STREAK_H);
+          if (canvas) {
+              const ctx = canvas.context;
+              const grad = ctx.createLinearGradient(0, 0, SPEED_LINES.STREAK_W, 0);
+              grad.addColorStop(0, 'rgba(255,255,255,0)');
+              grad.addColorStop(0.4, 'rgba(255,255,255,0.9)');
+              grad.addColorStop(1, 'rgba(255,255,255,0)');
+              ctx.fillStyle = grad;
+              ctx.fillRect(0, 0, SPEED_LINES.STREAK_W, SPEED_LINES.STREAK_H);
+              canvas.refresh();
+          }
+      }
+
+      const W = this.scale.width;
+      const H = this.scale.height;
+      const bandHeight = H * SPEED_LINES.BAND_HEIGHT_RATIO;
+      const topCenter = H * SPEED_LINES.TOP_BAND_RATIO;
+      const botCenter = H * SPEED_LINES.BOTTOM_BAND_RATIO;
+
+      const makeEmitter = (centerY: number) =>
+          this.add.particles(0, 0, TEX_KEY, {
+              x: W + 60,
+              y: { min: centerY - bandHeight / 2, max: centerY + bandHeight / 2 },
+              speedX: { min: SPEED_LINES.STREAK_SPEED_MIN, max: SPEED_LINES.STREAK_SPEED_MAX },
+              lifespan: SPEED_LINES.STREAK_LIFESPAN_MS,
+              alpha: { start: 0.55, end: 0 },
+              scaleX: { min: 0.6, max: 1.4 },
+              scaleY: { min: 0.8, max: 1.2 },
+              quantity: 1,
+              frequency: -1,
+              emitting: false,
+          }).setDepth(15).setScrollFactor(0);
+
+      this.speedLinesTop = makeEmitter(topCenter);
+      this.speedLinesBottom = makeEmitter(botCenter);
+  }
+
+  private setSpeedLinesTier(tier: number) {
+      const idx = Math.max(0, Math.min(3, tier - 1));
+      const alphaMax = SPEED_LINES.TIER_ALPHA_MAX[idx];
+      const freq = SPEED_LINES.TIER_FREQUENCY_MS[idx];
+
+      for (const em of [this.speedLinesTop, this.speedLinesBottom]) {
+          if (!em || !em.active) continue;
+          if (alphaMax <= 0 || freq <= 0) {
+              em.stop();
+              continue;
+          }
+          em.frequency = freq;
+          // alpha range is fixed at init; tier intensity comes from emit frequency.
+          em.start();
+      }
   }
 
   /**
@@ -862,41 +950,147 @@ export class MainScene extends Phaser.Scene {
       if (this.isGameOver || this.isPausedMenu) return;
       if (this.eventManager?.eventPhase === 'STAGE_2_INTRO' || this.eventManager?.eventPhase === 'LEVEL_TRANSITION') return;
 
-      const prevTier = this.comboTier;
-      this.comboCount += 1;
-      this.comboTier = this.computeComboTier(this.comboCount);
-      this.updateComboHud(this.comboTier !== prevTier);
+      this.bumpCombo();
+      this.addBondPoints(NOOR_BOND_REWARDS.PERFECT_JUMP);
 
       const multiplier = this.getComboMultiplier();
       const bonus = PERFECT_JUMP.BONUS * multiplier;
       this.addScore(bonus);
 
-      const label = multiplier > 1 ? `+${bonus} PERFECT! ×${multiplier}` : `+${bonus} PERFECT!`;
-      const txt = this.add.text(x, y - 60, label, {
-          fontFamily: 'Cairo', fontSize: '20px', fontStyle: 'bold',
-          color: '#ffd700', stroke: '#000', strokeThickness: 3,
-      }).setOrigin(0.5).setDepth(400);
-      this.tweens.add({ targets: txt, y: y - 120, alpha: 0, duration: 900, onComplete: () => txt.destroy() });
+      const label = multiplier > 1 ? `+${bonus} PERFECT ×${multiplier}` : `+${bonus} PERFECT`;
+      const txt = this.add.text(x, y - 50, label, {
+          fontFamily: 'Cairo', fontSize: '14px', fontStyle: 'bold',
+          color: '#ffd700', stroke: '#000', strokeThickness: 2,
+      }).setOrigin(0.5).setDepth(400).setAlpha(0.95);
+      this.tweens.add({ targets: txt, y: y - 90, alpha: 0, duration: 700, onComplete: () => txt.destroy() });
 
-      // Expanding gold ring centered on the player at apex.
-      const ring = this.add.graphics().setDepth(399);
-      const startR = PERFECT_JUMP.RING_START_RADIUS;
-      const endR = PERFECT_JUMP.RING_RADIUS;
-      this.tweens.addCounter({
-          from: 0, to: 1,
-          duration: PERFECT_JUMP.RING_DURATION_MS,
-          ease: 'Cubic.out',
-          onUpdate: (tw) => {
-              const t = tw.getValue();
-              const r = startR + (endR - startR) * t;
-              ring.clear();
-              ring.lineStyle(PERFECT_JUMP.RING_STROKE_WIDTH, PERFECT_JUMP.RING_COLOR, 1 - t);
-              ring.strokeCircle(x, y, r);
-          },
-          onComplete: () => ring.destroy(),
-      });
+      if (this.textures.exists('dust_particle')) {
+          const emitter = this.add.particles(x, y, 'dust_particle', {
+              lifespan: PERFECT_JUMP.PARTICLE_LIFESPAN_MS,
+              speed: { min: PERFECT_JUMP.PARTICLE_SPEED_MIN, max: PERFECT_JUMP.PARTICLE_SPEED_MAX },
+              angle: { min: 0, max: 360 },
+              scale: { start: 0.9, end: 0 },
+              alpha: { start: 1, end: 0 },
+              tint: PERFECT_JUMP.PARTICLE_COLOR,
+              quantity: PERFECT_JUMP.PARTICLE_COUNT,
+              emitting: false,
+          });
+          emitter.setDepth(399);
+          emitter.explode(PERFECT_JUMP.PARTICLE_COUNT);
+          this.time.delayedCall(PERFECT_JUMP.PARTICLE_LIFESPAN_MS + 60, () => emitter.destroy());
+      }
+
+      this.cameras.main.shake(
+          PERFECT_JUMP.SHAKE_MS,
+          new Phaser.Math.Vector2(0, PERFECT_JUMP.SHAKE_INTENSITY_Y),
+      );
+      this.hitStop(HITSTOP.PERFECT_JUMP_MS, HITSTOP.PERFECT_JUMP_SCALE);
 
       this.audioManager?.playStarPitched(PERFECT_JUMP.DETUNE);
+  }
+
+  /**
+   * Skill depth — Sub-slice 4: Noor bond meter.
+   * Accumulates points across the run. Damage does NOT decrement (progression only goes up
+   * per the design spec). Crossing a tier threshold fires onBondTierUp which currently just
+   * surfaces a notification; slice 5 will wire cosmetics, passives, and Nur dialogue.
+   */
+  private addBondPoints(amount: number) {
+      if (amount <= 0) return;
+      if (this.isGameOver || this.isPausedMenu) return;
+      const prevTier = this.bondTier;
+      this.bondPoints += amount;
+      this.bondTier = getBondTier(this.bondPoints);
+      this.updateBondHud();
+      if (this.bondTier > prevTier) {
+          this.onBondTierUp(this.bondTier);
+      }
+  }
+
+  /**
+   * Slice 4 scaffold: floating notification only. Slice 5 will resolve the tier's
+   * cosmeticKey, passiveKey, and dialogue (see data/noorBond.ts) into actual gameplay effects.
+   */
+  private onBondTierUp(newTier: number) {
+      const def = getBondTierDef(newTier);
+      if (!def) return;
+      const x = this.scale.width / 2;
+      const y = BOND_HUD.Y + 30;
+      const txt = this.add.text(x, y, def.label, {
+          fontFamily: 'Cairo', fontSize: '22px', fontStyle: 'bold',
+          color: '#ffd700', stroke: '#000', strokeThickness: 4,
+      }).setOrigin(0.5, 0.5).setDepth(500).setScrollFactor(0);
+      this.tweens.add({
+          targets: txt,
+          scale: { from: 0.5, to: 1.0 },
+          duration: 320,
+          ease: 'Back.easeOut',
+      });
+      this.tweens.add({
+          targets: txt,
+          alpha: 0,
+          y: y + 40,
+          delay: 1200,
+          duration: 600,
+          onComplete: () => txt.destroy(),
+      });
+      this.audioManager?.playStarPitched(800);
+  }
+
+  private updateBondHud() {
+      const x = this.scale.width / 2;
+      const y = BOND_HUD.Y;
+      const w = BOND_HUD.WIDTH;
+      const h = BOND_HUD.HEIGHT;
+
+      // Drop stale refs after scene.restart()
+      if (this.bondHudBg && !this.bondHudBg.active) this.bondHudBg = null;
+      if (this.bondHudFill && !this.bondHudFill.active) this.bondHudFill = null;
+      if (this.bondHudLabel && !this.bondHudLabel.active) this.bondHudLabel = null;
+
+      if (!this.bondHudBg) {
+          this.bondHudBg = this.add.graphics().setDepth(498).setScrollFactor(0);
+      }
+      if (!this.bondHudFill) {
+          this.bondHudFill = this.add.graphics().setDepth(499).setScrollFactor(0);
+      }
+      if (!this.bondHudLabel) {
+          this.bondHudLabel = this.add.text(x, y, '', {
+              fontFamily: 'Cairo', fontSize: `${BOND_HUD.LABEL_SIZE}px`, fontStyle: 'bold',
+              color: '#ffffff', stroke: '#000', strokeThickness: 2,
+          }).setOrigin(0.5, 0.5).setDepth(500).setScrollFactor(0);
+      }
+
+      // Compute fill ratio within the current tier (banked points → next threshold)
+      const floor = getCurrentTierFloor(this.bondTier);
+      const ceil = getNextTierThreshold(this.bondTier);
+      const ratio = ceil === null
+          ? 1
+          : Math.max(0, Math.min(1, (this.bondPoints - floor) / (ceil - floor)));
+
+      // Background
+      this.bondHudBg.clear();
+      this.bondHudBg.fillStyle(BOND_HUD.BG_COLOR, 0.75);
+      this.bondHudBg.fillRect(x - w / 2, y - h / 2, w, h);
+      this.bondHudBg.lineStyle(BOND_HUD.BORDER_WIDTH, BOND_HUD.BORDER_COLOR, 0.7);
+      this.bondHudBg.strokeRect(x - w / 2, y - h / 2, w, h);
+
+      // Fill
+      this.bondHudFill.clear();
+      const innerW = (w - BOND_HUD.PADDING * 2) * ratio;
+      const innerH = h - BOND_HUD.PADDING * 2;
+      this.bondHudFill.fillStyle(BOND_HUD.FILL_COLOR, 1);
+      if (innerW > 0) {
+          this.bondHudFill.fillRect(x - w / 2 + BOND_HUD.PADDING, y - h / 2 + BOND_HUD.PADDING, innerW, innerH);
+      }
+
+      // Label
+      const labelText = ceil === null
+          ? `BOND • MAX • ${this.bondPoints}`
+          : `BOND • T${this.bondTier} • ${this.bondPoints}/${ceil}`;
+      this.bondHudLabel.setText(labelText);
+      this.bondHudLabel.x = x;
+      this.bondHudLabel.y = y;
   }
 
   public addHeart(): boolean {
@@ -1010,6 +1204,7 @@ export class MainScene extends Phaser.Scene {
           this.audioManager?.playPuzzleCorrect();
           this.cameras.main.flash(220, 255, 220, 120);
           this.correctAnswersCount++;
+          this.addBondPoints(NOOR_BOND_REWARDS.QUIZ_CORRECT);
           this.activeQuestion = null;
           this.eventManager.isEncounterOpening = true;
           this.showNoorMessage('أحسنت! استمر، أنت تتقدم.', false, 'encourage');

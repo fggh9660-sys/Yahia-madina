@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PERFECT_JUMP, getPlayerStartX, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PERFECT_JUMP, COMBO, getPlayerStartX, getPlayerSpawnY } from '../../constants';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   // ... (Keep existing declarations) ...
@@ -66,6 +66,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private isShielded: boolean = false;
   private shieldTimer: number = 0;
   private shieldAura!: Phaser.GameObjects.Sprite;
+
+  private comboAura!: Phaser.GameObjects.Sprite;
+  private comboAuraTier: number = 1;
   
   // Input State
   private isHoldingJump: boolean = false;
@@ -107,6 +110,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.initAnimations();
     this.initParticles();
     this.initShieldAura();
+    this.initComboAura();
     this.setupInputs();
     
     // Create Carpet Sprite (Hidden by default)
@@ -324,6 +328,57 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           targets: this.shieldAura,
           scale: { from: 1, to: 1.05 }, alpha: { from: 1, to: 0.8 },
           duration: 1500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+      });
+  }
+
+  private initComboAura() {
+      this.comboAura = this.scene.add.sprite(this.x, this.y, 'shield_aura');
+      this.comboAura.setDepth(18);
+      this.comboAura.setVisible(false);
+      this.comboAura.setBlendMode(Phaser.BlendModes.ADD);
+      this.comboAura.setAlpha(0);
+
+      this.scene.tweens.add({
+          targets: this.comboAura,
+          angle: -360,
+          duration: 8000,
+          repeat: -1,
+          ease: 'Linear',
+      });
+      this.scene.tweens.add({
+          targets: this.comboAura,
+          scale: { from: 0.95, to: 1.08 },
+          duration: 900,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+      });
+  }
+
+  public setComboAuraTier(tier: number) {
+      this.comboAuraTier = Math.max(1, Math.min(4, tier));
+      const alpha = COMBO.AURA_ALPHA[this.comboAuraTier - 1];
+      const tint = COMBO.TIER_TINTS[this.comboAuraTier - 1];
+
+      if (alpha <= 0) {
+          if (this.comboAura.visible) {
+              this.scene.tweens.add({
+                  targets: this.comboAura,
+                  alpha: 0,
+                  duration: 250,
+                  onComplete: () => this.comboAura.setVisible(false),
+              });
+          }
+          return;
+      }
+
+      this.comboAura.setTint(tint);
+      this.comboAura.setVisible(true);
+      this.scene.tweens.add({
+          targets: this.comboAura,
+          alpha,
+          duration: 220,
+          ease: 'Sine.easeOut',
       });
   }
 
@@ -551,6 +606,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             this.isShielded = false;
             this.shieldAura.setVisible(false);
         }
+    }
+
+    if (this.comboAura && this.comboAura.visible) {
+        this.comboAura.setPosition(this.x, this.y);
     }
 
     const isJumpKeyHeld = (this.jumpKey?.isDown) || (this.cursors?.up.isDown) || this.isHoldingJump;
