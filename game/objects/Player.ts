@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, getPlayerStartX, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PERFECT_JUMP, getPlayerStartX, getPlayerSpawnY } from '../../constants';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   // ... (Keep existing declarations) ...
@@ -45,6 +45,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private apexHangTimer: number = 0;
   private inApexHang: boolean = false;
   private originalGravityY: number = 0;
+
+  // Perfect-jump apex tap (sub-slice 3) — fires once per jump arc
+  private perfectJumpFiredThisArc: boolean = false;
   
   // Event States
   public isHanging: boolean = false;
@@ -265,6 +268,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // Reset apex hang so the new arc gets its own hang window
       this.inApexHang = false;
       this.apexHangTimer = 0;
+      this.perfectJumpFiredThisArc = false;
   }
 
   private initShieldAura() {
@@ -386,6 +390,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private layoutTouchButtons() {
+    // Resize events can fire after destroy (scene shutdown) when this.scene is already unset.
+    if (!this.scene || !this.scene.scale) return;
     if (!this.leftTouchButton || !this.rightTouchButton) return;
 
     const SIZE = 84;
@@ -581,6 +587,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // --- Apex hang + asymmetric fall curve ---
     const vy = body.velocity.y;
     if (!onGround) {
+        // Perfect-jump apex tap (sub-slice 3): tap jump inside apex velocity window for bonus.
+        // Gated by isJumping (so walking off a ledge doesn't qualify) and a once-per-arc flag.
+        if (this.isJumping && wantsToJump && !this.perfectJumpFiredThisArc &&
+            Math.abs(vy) < PERFECT_JUMP.VY_THRESHOLD) {
+            this.perfectJumpFiredThisArc = true;
+            const sc = this.scene as { onPerfectJump?: (x: number, y: number) => void };
+            sc.onPerfectJump?.(this.x, this.y);
+        }
+
         if (!this.inApexHang && this.apexHangTimer === 0 && Math.abs(vy) < PHYSICS.APEX_VY_THRESHOLD) {
             this.inApexHang = true;
             this.apexHangTimer = PHYSICS.APEX_HANG_MS;
@@ -605,6 +620,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         // Grounded — reset apex state and restore base gravity
         this.inApexHang = false;
         this.apexHangTimer = 0;
+        this.perfectJumpFiredThisArc = false;
         body.setGravityY(this.originalGravityY);
     }
 
@@ -679,6 +695,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       ghost.setRotation(this.rotation);
       ghost.setScale(this.scaleX, this.scaleY);
       this.scene.tweens.add({ targets: ghost, alpha: 0, x: this.x - 30, duration: 300, onComplete: () => ghost.destroy() });
+  }
+
+  destroy(fromScene?: boolean): void {
+      // Detach the resize listener so it can't fire on a destroyed instance after scene shutdown.
+      if (this.scene?.scale) {
+          this.scene.scale.off('resize', this.layoutTouchButtons, this);
+      }
+      super.destroy(fromScene);
   }
 
   public takeDamage(onComplete: () => void): boolean {

@@ -241,10 +241,14 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         const playerLeft = player.body.x;
         if (obstacleRight < playerLeft - SKILL.NEAR_MISS_PASS_THRESHOLD_PX) {
           this.nearMissResolved = true;
-          // Only fire near-miss if we never overlapped AND no actual damage was recorded.
-          if (!this.wasHit && this.closestDistance > 0 && this.closestDistance < SKILL.NEAR_MISS_THRESHOLD) {
-            const handler = (this.scene as Phaser.Scene & { onNearMiss?: (x: number, y: number, obstacle?: Obstacle) => void }).onNearMiss;
-            if (typeof handler === 'function') handler.call(this.scene, this.x, this.y, this);
+          // Fire clean-clear event only when the player avoided this obstacle entirely.
+          // wasNearMiss=true on top of clean clear adds the near-miss juice + bonus.
+          if (!this.wasHit) {
+            const wasNearMiss = this.closestDistance > 0 && this.closestDistance < SKILL.NEAR_MISS_THRESHOLD;
+            const handler = (this.scene as Phaser.Scene & {
+              onObstacleCleared?: (wasNearMiss: boolean, x: number, y: number, obstacle?: Obstacle) => void;
+            }).onObstacleCleared;
+            if (typeof handler === 'function') handler.call(this.scene, wasNearMiss, this.x, this.y, this);
           }
         }
       }

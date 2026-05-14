@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PROGRESS, SKILL, getPlayerStartX, GAMEPLAY_CAMERA_ZOOM, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, getPlayerStartX, GAMEPLAY_CAMERA_ZOOM, getPlayerSpawnY } from '../../constants';
 import { Player } from '../objects/Player';
 import { Obstacle } from '../objects/Obstacle';
 import { Question, GameState, NoorMessage, StageResultsData, ActivePuzzle, PuzzleType } from '../../types';
@@ -61,7 +61,12 @@ export class MainScene extends Phaser.Scene {
   private runDistance: number = 0;
   private hearts: number = 3;
   private isGameOver: boolean = false;
-  
+
+  // Skill depth — sub-slice 2: combo chain state
+  private comboCount: number = 0;
+  private comboTier: number = 1;
+  private comboHudText: Phaser.GameObjects.Text | null = null;
+
   // UI State
   private activeMessage: string | null = null; 
   private currentNoorMessage: NoorMessage | null = null;
@@ -364,6 +369,10 @@ export class MainScene extends Phaser.Scene {
     this.hearts = 3;
     this.runDistance = 0;
     this.collectedStarsCount = 0;
+    this.comboCount = 0;
+    this.comboTier = 1;
+    // Reference is stale after scene.restart() destroys the old GameObject; let updateComboHud recreate.
+    this.comboHudText = null;
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
@@ -716,25 +725,94 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
-   * Skill depth — Sub-slice 1: Near-miss event.
-   * Called by Obstacle when it passes the player within SKILL.NEAR_MISS_THRESHOLD
-   * without ever overlapping. Rewards courage with a small score bonus, audio cue,
-   * a camera zoom punch, a brief slow-mo / hit-stop, and a flash on the obstacle itself.
+   * Skill depth — Sub-slice 2 entry point. Called by Obstacle when it passes the player
+   * without overlap. Increments combo (any clean clear) and fires near-miss juice when
+   * the player threaded the gap.
    */
-  public onNearMiss(x: number, y: number, obstacle?: Phaser.GameObjects.Sprite) {
+  public onObstacleCleared(wasNearMiss: boolean, x: number, y: number, obstacle?: Phaser.GameObjects.Sprite) {
       if (this.isGameOver || this.isPausedMenu) return;
       if (this.eventManager?.eventPhase === 'STAGE_2_INTRO' || this.eventManager?.eventPhase === 'LEVEL_TRANSITION') return;
 
-      // 1. Score bonus
-      this.addScore(SKILL.NEAR_MISS_BONUS);
+      const prevTier = this.comboTier;
+      this.comboCount += 1;
+      this.comboTier = this.computeComboTier(this.comboCount);
+      this.updateComboHud(this.comboTier !== prevTier);
+
+      if (wasNearMiss) this.fireNearMissJuice(x, y, obstacle);
+  }
+
+  /** Map combo count → tier index (1-based). */
+  private computeComboTier(count: number): number {
+      if (count >= COMBO.TIER_4_AT) return 4;
+      if (count >= COMBO.TIER_3_AT) return 3;
+      if (count >= COMBO.TIER_2_AT) return 2;
+      return 1;
+  }
+
+  private getComboMultiplier(): number {
+      return COMBO.MULTIPLIERS[this.comboTier - 1];
+  }
+
+  /** Called from damagePlayer when the player actually takes damage. */
+  private resetCombo() {
+      if (this.comboCount === 0) return;
+      this.comboCount = 0;
+      this.comboTier = 1;
+      this.updateComboHud(false);
+  }
+
+  private updateComboHud(tierChanged: boolean) {
+      // Drop stale reference if the previous Text was destroyed by scene.restart() — its internal
+      // texture is gone and calling setText on it crashes Phaser's renderer.
+      if (this.comboHudText && !this.comboHudText.active) {
+          this.comboHudText = null;
+      }
+      if (!this.comboHudText) {
+          this.comboHudText = this.add.text(
+              this.scale.width * COMBO.HUD_X_RATIO, COMBO.HUD_Y, '',
+              { fontFamily: 'Cairo', fontSize: '32px', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }
+          ).setOrigin(0.5, 0.5).setDepth(500).setScrollFactor(0);
+      } else {
+          // Keep centered if the canvas was resized (orientation change on mobile).
+          this.comboHudText.x = this.scale.width * COMBO.HUD_X_RATIO;
+      }
+      if (this.comboTier < 2) {
+          this.comboHudText.setVisible(false);
+          this.comboHudText.setText('');
+          return;
+      }
+      this.comboHudText.setVisible(true);
+      this.comboHudText.setText(`COMBO ×${this.getComboMultiplier()}`);
+      this.comboHudText.setColor(COMBO.TIER_COLORS[this.comboTier - 1]);
+      if (tierChanged) {
+          this.tweens.add({
+              targets: this.comboHudText,
+              scale: { from: 1.5, to: 1 },
+              duration: 250,
+              ease: 'Back.easeOut',
+          });
+      }
+  }
+
+  /**
+   * Skill depth — Sub-slice 1: Near-miss juice (slow-mo, zoom punch, tint, audio, +bonus).
+   * Bonus is multiplied by the current combo multiplier (sub-slice 2).
+   */
+  private fireNearMissJuice(x: number, y: number, obstacle?: Phaser.GameObjects.Sprite) {
+      const multiplier = this.getComboMultiplier();
+      const bonus = SKILL.NEAR_MISS_BONUS * multiplier;
+
+      // 1. Score bonus (scaled by combo)
+      this.addScore(bonus);
 
       // 2. Floating text — anchored near the player (obstacle has already drifted off to the
       // left by the time near-miss resolves, so spawning at obstacle.x reads as too far left).
       // Lifted well above ground and depth-pinned above all overlays.
       const anchorX = this.player ? this.player.x - 20 : x + 40;
-      const nearText = this.add.text(anchorX, y - 70, `+${SKILL.NEAR_MISS_BONUS} NEAR!`, {
+      const label = multiplier > 1 ? `+${bonus} NEAR! ×${multiplier}` : `+${bonus} NEAR!`;
+      const nearText = this.add.text(anchorX, y - 70, label, {
           fontFamily: 'Cairo', fontSize: '20px', fontStyle: 'bold',
-          color: '#00f2ff', stroke: '#000', strokeThickness: 3
+          color: COMBO.TIER_COLORS[this.comboTier - 1], stroke: '#000', strokeThickness: 3
       }).setOrigin(0.5).setDepth(400);
       this.tweens.add({ targets: nearText, y: y - 130, alpha: 0, duration: 900, onComplete: () => nearText.destroy() });
 
@@ -771,8 +849,54 @@ export class MainScene extends Phaser.Scene {
           }
       });
 
-      // 6. Audio cue — placeholder: reuse the existing star SFX. Final near-miss SFX to come later.
-      this.audioManager?.playStar();
+      // 6. Audio cue — placeholder star SFX with combo-tier pitch escalation.
+      this.audioManager?.playStarPitched(COMBO.TIER_DETUNE[this.comboTier - 1]);
+  }
+
+  /**
+   * Skill depth — Sub-slice 3: perfect-jump apex bonus.
+   * Called by Player when the user taps jump inside the apex velocity window (once per arc).
+   * Counts as a clean clear (feeds combo), awards score scaled by combo, plays gold ring + chime.
+   */
+  public onPerfectJump(x: number, y: number) {
+      if (this.isGameOver || this.isPausedMenu) return;
+      if (this.eventManager?.eventPhase === 'STAGE_2_INTRO' || this.eventManager?.eventPhase === 'LEVEL_TRANSITION') return;
+
+      const prevTier = this.comboTier;
+      this.comboCount += 1;
+      this.comboTier = this.computeComboTier(this.comboCount);
+      this.updateComboHud(this.comboTier !== prevTier);
+
+      const multiplier = this.getComboMultiplier();
+      const bonus = PERFECT_JUMP.BONUS * multiplier;
+      this.addScore(bonus);
+
+      const label = multiplier > 1 ? `+${bonus} PERFECT! ×${multiplier}` : `+${bonus} PERFECT!`;
+      const txt = this.add.text(x, y - 60, label, {
+          fontFamily: 'Cairo', fontSize: '20px', fontStyle: 'bold',
+          color: '#ffd700', stroke: '#000', strokeThickness: 3,
+      }).setOrigin(0.5).setDepth(400);
+      this.tweens.add({ targets: txt, y: y - 120, alpha: 0, duration: 900, onComplete: () => txt.destroy() });
+
+      // Expanding gold ring centered on the player at apex.
+      const ring = this.add.graphics().setDepth(399);
+      const startR = PERFECT_JUMP.RING_START_RADIUS;
+      const endR = PERFECT_JUMP.RING_RADIUS;
+      this.tweens.addCounter({
+          from: 0, to: 1,
+          duration: PERFECT_JUMP.RING_DURATION_MS,
+          ease: 'Cubic.out',
+          onUpdate: (tw) => {
+              const t = tw.getValue();
+              const r = startR + (endR - startR) * t;
+              ring.clear();
+              ring.lineStyle(PERFECT_JUMP.RING_STROKE_WIDTH, PERFECT_JUMP.RING_COLOR, 1 - t);
+              ring.strokeCircle(x, y, r);
+          },
+          onComplete: () => ring.destroy(),
+      });
+
+      this.audioManager?.playStarPitched(PERFECT_JUMP.DETUNE);
   }
 
   public addHeart(): boolean {
@@ -806,6 +930,9 @@ export class MainScene extends Phaser.Scene {
       if (this.eventManager.eventPhase === 'NUR_INTRO') return;
       if (this.eventManager.eventPhase === 'STAGE_2_INTRO') return;
       if (this.eventManager.eventPhase.startsWith('LEVEL')) return;
+
+      // Combo chain: actual damage breaks the chain (shield blocks do not — those are filtered upstream).
+      this.resetCombo();
 
       if (fatal) {
           this.hearts = 0;

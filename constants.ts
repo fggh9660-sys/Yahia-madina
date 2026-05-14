@@ -75,6 +75,51 @@ export const SKILL = {
   NEAR_MISS_PASS_THRESHOLD_PX: 30,
 };
 
+// Skill depth — perfect-jump apex tap (sub-slice 3)
+// Tapping jump while near the apex of a variable jump (|vy| < threshold) awards a bonus.
+// Fires at most once per jump arc. Math: with JUMP_FORCE -800 and GRAVITY 1800, the
+// |vy| < 220 window is reached only ~320ms after takeoff, so the initial takeoff tap
+// cannot false-trigger this.
+export const PERFECT_JUMP = {
+  /** Apex window: |vy| < this px/s = perfect-jump zone. ~245ms window with current physics. */
+  VY_THRESHOLD: 220,
+  /** Score bonus per perfect jump (multiplied by combo tier). */
+  BONUS: 8,
+  /** Detune (cents) for the chime SFX. 1200 = +1 octave. */
+  DETUNE: 1200,
+  /** Ring outer radius (px) at end of expansion. */
+  RING_RADIUS: 70,
+  /** Ring start radius (px). */
+  RING_START_RADIUS: 14,
+  /** Ring stroke width (px). */
+  RING_STROKE_WIDTH: 3,
+  /** Ring lifespan (ms). */
+  RING_DURATION_MS: 380,
+  /** Ring color (gold). */
+  RING_COLOR: 0xffd700,
+};
+
+// Skill depth — combo chain (sub-slice 2)
+// Combo increments every time an obstacle is cleared without damage. Resets when player
+// actually takes damage. Multiplier applies to near-miss bonuses.
+export const COMBO = {
+  /** Tier thresholds (inclusive). Reaching N clean clears moves you to that tier. */
+  TIER_2_AT: 3,   // combo 3-5  → x2
+  TIER_3_AT: 6,   // combo 6-9  → x3
+  TIER_4_AT: 10,  // combo 10+  → x4
+  /** Multiplier per tier. Index 0 = tier 1 (combos 1-2), no bonus boost. */
+  MULTIPLIERS: [1, 2, 3, 4] as const,
+  /** Tier badge color (hex string for Phaser text). */
+  TIER_COLORS: ['#ffffff', '#00f2ff', '#ffd700', '#ff4d4d'] as const,
+  /** Audio detune (cents) per tier — pitch escalation on near-miss SFX. 100 cents = 1 semitone. */
+  TIER_DETUNE: [0, 200, 400, 700] as const,
+  /** HUD badge horizontal ratio (0=left, 0.5=center, 1=right). Center keeps it clear of the
+   *  React-side distance/hearts/audio/pause cluster anchored top-right. */
+  HUD_X_RATIO: 0.5,
+  /** HUD badge y position — sits below the progress bar at the very top. */
+  HUD_Y: 100,
+};
+
 /** Distance in meters with no obstacles at run start (tutorial: Nur explains jump first). */
 export const INTRO_SAFE_DISTANCE_M = 22;
 
