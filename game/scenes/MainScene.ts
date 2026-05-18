@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, getPlayerStartX, GAMEPLAY_CAMERA_ZOOM, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
 import { NOOR_BOND_REWARDS, getBondTier, getBondTierDef, getNextTierThreshold, getCurrentTierFloor } from '../../data/noorBond';
 import { Player } from '../objects/Player';
 import { Obstacle } from '../objects/Obstacle';
@@ -174,7 +174,7 @@ export class MainScene extends Phaser.Scene {
     // 4. Create Player
     const height = Math.max(10, Math.ceil(this.scale.height));
     this.player = new Player(this, getPlayerStartX(this.scale.width), getPlayerSpawnY(height));
-    this.cameras.main.setZoom(GAMEPLAY_CAMERA_ZOOM);
+    this.cameras.main.setZoom(getGameplayCameraZoom(this.scale.width, this.scale.height));
     this.player.setVariableJump(true);
 
     // 5. Setup Collisions (needed for safe running after intro)
@@ -189,8 +189,10 @@ export class MainScene extends Phaser.Scene {
     this.scale.on('resize', this.handleResize, this);
     this.input.on('pointerdown', this.handleGlobalTap, this);
 
-    // 8. Show the empty bond meter from the start so player learns it exists before earning points.
-    this.updateBondHud();
+    // 8. Bond meter HUD hidden 2026-05-17 pending Yahia's redesign direction. Data scaffold
+    //    (state, hooks, data/noorBond.ts) preserved — only the visible HUD + tier-up notification
+    //    are suppressed. Flip BOND_HUD_VISIBLE to re-enable when the redesigned UI lands.
+    // this.updateBondHud();
 
     // 9. Speed lines emitters (subtle motion streaks scaled by combo tier).
     this.initSpeedLines();
@@ -663,6 +665,7 @@ export class MainScene extends Phaser.Scene {
       const width = gameSize.width;
       const height = gameSize.height;
       this.cameras.main.setViewport(0, 0, width, height);
+      this.cameras.main.setZoom(getGameplayCameraZoom(width, height));
       this.environmentManager.resize(width, height);
       if (this.sandstormOverlay) {
           this.sandstormOverlay.setPosition(width/2, height/2);
@@ -682,6 +685,20 @@ export class MainScene extends Phaser.Scene {
           this.player.y = getPlayerSpawnY(height);
           this.player.setVelocityY(0);
       }
+      this.rebuildSpeedLines();
+      if (this.comboHudText?.active) {
+          this.comboHudText.x = width * COMBO.HUD_X_RATIO;
+      }
+  }
+
+  private rebuildSpeedLines() {
+      const currentTier = this.comboTier;
+      if (this.speedLinesTop?.active) this.speedLinesTop.destroy();
+      if (this.speedLinesBottom?.active) this.speedLinesBottom.destroy();
+      this.speedLinesTop = null;
+      this.speedLinesBottom = null;
+      this.initSpeedLines();
+      this.setSpeedLinesTier(currentTier);
   }
 
   private handleGlobalTap() {
@@ -998,13 +1015,9 @@ export class MainScene extends Phaser.Scene {
   private addBondPoints(amount: number) {
       if (amount <= 0) return;
       if (this.isGameOver || this.isPausedMenu) return;
-      const prevTier = this.bondTier;
       this.bondPoints += amount;
       this.bondTier = getBondTier(this.bondPoints);
-      this.updateBondHud();
-      if (this.bondTier > prevTier) {
-          this.onBondTierUp(this.bondTier);
-      }
+      // HUD render + tier-up notification suppressed pending Yahia's redesign — data still accumulates.
   }
 
   /**

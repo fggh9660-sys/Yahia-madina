@@ -3,6 +3,42 @@ export const GAME_HEIGHT = window.innerHeight > 0 ? window.innerHeight : 600;
 
 export const GAMEPLAY_CAMERA_ZOOM = 1.10;
 
+export const MOBILE_BREAKPOINT_PX = 600;
+export const SHORT_HEIGHT_BREAKPOINT_PX = 500;
+
+export const GAMEPLAY_CAMERA_ZOOM_LANDSCAPE_MOBILE = 0.90;
+export const GAMEPLAY_CAMERA_ZOOM_PORTRAIT_MOBILE = 1.15;
+
+export function getGameplayCameraZoom(viewWidth: number, viewHeight: number): number {
+  if (viewHeight < SHORT_HEIGHT_BREAKPOINT_PX) return GAMEPLAY_CAMERA_ZOOM_LANDSCAPE_MOBILE;
+  if (viewWidth < MOBILE_BREAKPOINT_PX) return GAMEPLAY_CAMERA_ZOOM_PORTRAIT_MOBILE;
+  return GAMEPLAY_CAMERA_ZOOM;
+}
+
+export const TOUCH_BTN = {
+  SIZE_DESKTOP: 84,
+  SIZE_COMPACT: 56,
+  EDGE_MARGIN_DESKTOP: 80,
+  EDGE_MARGIN_COMPACT: 12,
+  BOTTOM_MARGIN_DESKTOP: 28,
+  BOTTOM_MARGIN_COMPACT: 16,
+  GAP_DESKTOP: 48,
+  GAP_COMPACT: 16,
+  ICON_SIZE_DESKTOP: 36,
+  ICON_SIZE_COMPACT: 24,
+};
+
+export function getTouchButtonLayout(viewWidth: number, viewHeight: number) {
+  const isCompact = viewWidth < MOBILE_BREAKPOINT_PX || viewHeight < SHORT_HEIGHT_BREAKPOINT_PX;
+  return {
+    size: isCompact ? TOUCH_BTN.SIZE_COMPACT : TOUCH_BTN.SIZE_DESKTOP,
+    edgeMargin: isCompact ? TOUCH_BTN.EDGE_MARGIN_COMPACT : TOUCH_BTN.EDGE_MARGIN_DESKTOP,
+    gap: isCompact ? TOUCH_BTN.GAP_COMPACT : TOUCH_BTN.GAP_DESKTOP,
+    iconSize: isCompact ? TOUCH_BTN.ICON_SIZE_COMPACT : TOUCH_BTN.ICON_SIZE_DESKTOP,
+    bottomMargin: isCompact ? TOUCH_BTN.BOTTOM_MARGIN_COMPACT : TOUCH_BTN.BOTTOM_MARGIN_DESKTOP,
+  };
+}
+
 export const RUN_SURFACE_FROM_BOTTOM = 182;
 export const GROUND_TILE_HEIGHT = 128;
 

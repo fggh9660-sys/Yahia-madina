@@ -487,9 +487,9 @@ function App() {
   }, [gameState.isGameOver]);
 
   return (
-    <div className="relative w-full h-screen bg-[#1a1625] overflow-hidden select-none touch-none">
-       {/* Game Container */}
-      <div id="game-container" className="absolute inset-0 z-0" />
+    <div className="relative w-full h-screen bg-[#1a1625] overflow-hidden select-none">
+       {/* Game Container — touch-none here so gameplay swipes don't scroll the page, while keeping React menu buttons tappable on iOS */}
+      <div id="game-container" className="absolute inset-0 z-0 touch-none" />
       
       {/* Intro Gate: subtle tap-to-begin screen before main menu */}
       {isLoaded && gameStatus === 'intro_gate' && (

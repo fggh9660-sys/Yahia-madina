@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PERFECT_JUMP, COMBO, getPlayerStartX, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PERFECT_JUMP, COMBO, getPlayerStartX, getPlayerSpawnY, getTouchButtonLayout } from '../../constants';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   // ... (Keep existing declarations) ...
@@ -404,32 +404,31 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private createTouchButtons() {
-    // Bottom-left cluster (L next to R) so a single thumb handles drift; rest of screen still triggers jump.
-    const SIZE = 84;
+    const layout = getTouchButtonLayout(this.scene.scale.width, this.scene.scale.height);
     const BG_COLOR = 0x000000;
-    const BG_ALPHA = 0.3;
+    const BG_ALPHA = 0.22;
     const STROKE_COLOR = 0xffffff;
-    const STROKE_ALPHA = 0.5;
+    const STROKE_ALPHA = 0.4;
 
-    this.leftTouchButton = this.scene.add.rectangle(0, 0, SIZE, SIZE, BG_COLOR, BG_ALPHA)
+    this.leftTouchButton = this.scene.add.rectangle(0, 0, layout.size, layout.size, BG_COLOR, BG_ALPHA)
       .setStrokeStyle(2, STROKE_COLOR, STROKE_ALPHA)
       .setScrollFactor(0)
       .setDepth(100)
       .setInteractive();
 
     this.leftTouchIcon = this.scene.add.text(0, 0, '◀', {
-        fontSize: '36px',
+        fontSize: `${layout.iconSize}px`,
         color: '#ffffff',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
 
-    this.rightTouchButton = this.scene.add.rectangle(0, 0, SIZE, SIZE, BG_COLOR, BG_ALPHA)
+    this.rightTouchButton = this.scene.add.rectangle(0, 0, layout.size, layout.size, BG_COLOR, BG_ALPHA)
       .setStrokeStyle(2, STROKE_COLOR, STROKE_ALPHA)
       .setScrollFactor(0)
       .setDepth(100)
       .setInteractive();
 
     this.rightTouchIcon = this.scene.add.text(0, 0, '▶', {
-        fontSize: '36px',
+        fontSize: `${layout.iconSize}px`,
         color: '#ffffff',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
 
@@ -445,19 +444,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private layoutTouchButtons() {
-    // Resize events can fire after destroy (scene shutdown) when this.scene is already unset.
     if (!this.scene || !this.scene.scale) return;
     if (!this.leftTouchButton || !this.rightTouchButton) return;
 
-    const SIZE = 84;
-    const EDGE_MARGIN = 80;
-    const BOTTOM_MARGIN = 28;
-    const GAP = 48;
+    const layout = getTouchButtonLayout(this.scene.scale.width, this.scene.scale.height);
     const H = this.scene.scale.height;
 
-    const cy = H - BOTTOM_MARGIN - SIZE / 2;
-    const leftCx = EDGE_MARGIN + SIZE / 2;
-    const rightCx = EDGE_MARGIN + SIZE + GAP + SIZE / 2;
+    this.leftTouchButton.setSize(layout.size, layout.size);
+    this.rightTouchButton.setSize(layout.size, layout.size);
+    this.leftTouchIcon.setFontSize(layout.iconSize);
+    this.rightTouchIcon.setFontSize(layout.iconSize);
+
+    const cy = H - layout.bottomMargin - layout.size / 2;
+    const leftCx = layout.edgeMargin + layout.size / 2;
+    const rightCx = layout.edgeMargin + layout.size + layout.gap + layout.size / 2;
 
     this.leftTouchButton.setPosition(leftCx, cy);
     this.leftTouchIcon.setPosition(leftCx, cy);
