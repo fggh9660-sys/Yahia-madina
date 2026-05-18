@@ -377,86 +377,89 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
 
       {/* MAGIC GATE QUESTION POPUP */}
       {gameState.activeQuestion && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none px-4">
-              <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-center gap-8 pointer-events-auto">
-                  
-                  {/* CHARACTER PORTRAIT (First in flex row = Right side in RTL) */}
-                  <div className="shrink-0 relative group animate-in zoom-in duration-500">
-                        {/* The Circle */}
-                        <div className="w-32 h-32 md:w-48 md:h-48 rounded-full border-4 border-[#ffd700] bg-[#1a1625] overflow-hidden shadow-[0_0_30px_rgba(255,215,0,0.3)] relative z-10 ring-4 ring-black/20">
-                            <img 
-                                src="https://ucarecdn.com/64926886-4015-49f7-9ebc-f3f206cf82e0/Gemini_Generated_Image_x273efx273efx273removebgpreview.png"
-                                alt="Prince Noor"
-                                className="w-full h-full object-cover object-top transform scale-110 translate-y-2" 
-                            />
-                        </div>
-                        {/* Name Badge */}
-                        <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 z-20 bg-gradient-to-r from-yellow-600 to-yellow-400 text-[#1a1625] px-4 py-1 rounded-full font-bold text-sm shadow-lg whitespace-nowrap border-2 border-[#1a1625]">
-                            الأمير نور
-                        </div>
-                        {/* Decorative Glow */}
-                        <div className="absolute inset-0 rounded-full bg-[#ffd700]/20 blur-2xl -z-10 animate-pulse"></div>
-                  </div>
+          <div className="absolute inset-0 z-40 overflow-y-auto pointer-events-none">
+              <div className="min-h-full flex items-center justify-center px-3 py-4 md:px-4 md:py-8">
+                  <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 pointer-events-auto">
 
-                  {/* Floating Card */}
-                  <div className="pointer-events-auto bg-[#1a1625]/95 backdrop-blur-xl border-2 border-[#ffd700] rounded-3xl p-6 md:p-10 w-full max-w-lg shadow-[0_0_80px_rgba(255,215,0,0.15)] relative overflow-hidden animate-in zoom-in-95 duration-500 flex flex-col items-center text-center">
-                      
-                      {/* Decorative Glow */}
-                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#ffd700] to-transparent"></div>
-                      
-                      {/* Icon */}
-                      <div className="mb-6 w-16 h-16 bg-yellow-400/10 rounded-full flex items-center justify-center border border-yellow-400/30 shadow-[0_0_20px_rgba(255,215,0,0.2)]">
-                        <span className="text-3xl">🔑</span>
+                      {/* CHARACTER PORTRAIT (First in flex row = Right side in RTL) */}
+                      <div className="shrink-0 relative group animate-in zoom-in duration-500">
+                            {/* The Circle */}
+                            <div className="w-20 h-20 sm:w-28 sm:h-28 md:w-48 md:h-48 rounded-full border-4 border-[#ffd700] bg-[#1a1625] overflow-hidden shadow-[0_0_30px_rgba(255,215,0,0.3)] relative z-10 ring-4 ring-black/20">
+                                <img
+                                    src="https://ucarecdn.com/64926886-4015-49f7-9ebc-f3f206cf82e0/Gemini_Generated_Image_x273efx273efx273removebgpreview.png"
+                                    alt="Prince Noor"
+                                    className="w-full h-full object-cover object-top transform scale-110 translate-y-2"
+                                />
+                            </div>
+                            {/* Name Badge */}
+                            <div className="absolute -bottom-2 md:-bottom-3 left-1/2 transform -translate-x-1/2 z-20 bg-gradient-to-r from-yellow-600 to-yellow-400 text-[#1a1625] px-2.5 md:px-4 py-0.5 md:py-1 rounded-full font-bold text-[10px] md:text-sm shadow-lg whitespace-nowrap border-2 border-[#1a1625]">
+                                الأمير نور
+                            </div>
+                            {/* Decorative Glow */}
+                            <div className="absolute inset-0 rounded-full bg-[#ffd700]/20 blur-2xl -z-10 animate-pulse"></div>
                       </div>
 
-                      {/* Question Header */}
-                      <div className="mb-8 relative z-10 w-full">
-                          <h3 className="text-[#ffd700] text-sm tracking-[0.2em] font-bold uppercase mb-3 opacity-80">سؤال البوابة</h3>
-                          <h2 className="text-white text-2xl md:text-3xl font-black leading-tight drop-shadow-md">
-                            {gameState.activeQuestion.text}
-                          </h2>
-                      </div>
+                      {/* Floating Card */}
+                      <div className="pointer-events-auto bg-[#1a1625]/95 backdrop-blur-xl border-2 border-[#ffd700] rounded-2xl md:rounded-3xl p-4 md:p-10 w-full max-w-lg shadow-[0_0_80px_rgba(255,215,0,0.15)] relative overflow-hidden animate-in zoom-in-95 duration-500 flex flex-col items-center text-center">
 
-                      {/* Options */}
-                      <div className="grid gap-3 w-full relative z-10">
-                          {gameState.activeQuestion.options.map((opt, idx) => {
-                              let btnClass = "bg-white/5 border border-white/10 hover:bg-white/10 text-white";
-                              let icon = null;
+                          {/* Decorative Glow */}
+                          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#ffd700] to-transparent"></div>
 
-                              if (selectedOption === idx) {
-                                  if (showResult === 'correct') {
-                                      btnClass = "bg-green-500/20 border-green-500 text-green-400";
-                                      icon = "✓";
-                                  } else if (showResult === 'wrong') {
-                                      btnClass = "bg-red-500/20 border-red-500 text-red-400 animate-shake";
-                                      icon = "✕";
+                          {/* Icon */}
+                          <div className="mb-3 md:mb-6 w-10 h-10 md:w-16 md:h-16 bg-yellow-400/10 rounded-full flex items-center justify-center border border-yellow-400/30 shadow-[0_0_20px_rgba(255,215,0,0.2)]">
+                            <span className="text-xl md:text-3xl">🔑</span>
+                          </div>
+
+                          {/* Question Header */}
+                          <div className="mb-4 md:mb-8 relative z-10 w-full">
+                              <h3 className="text-[#ffd700] text-[10px] md:text-sm tracking-[0.2em] font-bold uppercase mb-2 md:mb-3 opacity-80">سؤال البوابة</h3>
+                              <h2 className="text-white text-lg md:text-3xl font-black leading-tight drop-shadow-md">
+                                {gameState.activeQuestion.text}
+                              </h2>
+                          </div>
+
+                          {/* Options */}
+                          <div className="grid gap-2 md:gap-3 w-full relative z-10">
+                              {gameState.activeQuestion.options.map((opt, idx) => {
+                                  let btnClass = "bg-white/5 border border-white/10 hover:bg-white/10 text-white";
+                                  let icon = null;
+
+                                  if (selectedOption === idx) {
+                                      if (showResult === 'correct') {
+                                          btnClass = "bg-green-500/20 border-green-500 text-green-400";
+                                          icon = "✓";
+                                      } else if (showResult === 'wrong') {
+                                          btnClass = "bg-red-500/20 border-red-500 text-red-400 animate-shake";
+                                          icon = "✕";
+                                      }
                                   }
-                              }
 
-                              return (
-                                  <button
-                                      key={idx}
-                                      disabled={showResult === 'correct'}
-                                      onClick={() => handleOptionClick(idx)}
-                                      className={`p-4 rounded-xl text-lg font-bold transition-all duration-200 w-full flex items-center justify-between px-6 ${btnClass} shadow-md active:scale-[0.98]`}
-                                  >
-                                      <span>{opt}</span>
-                                      {icon && <span>{icon}</span>}
-                                  </button>
-                              )
-                          })}
-                      </div>
-                      
-                      {/* Feedback Text */}
-                      <div className="h-8 mt-4 flex items-center justify-center">
-                        {showResult === 'wrong' && (
-                            <span className="text-red-400 font-bold text-sm animate-pulse">حاول مرة أخرى!</span>
-                        )}
-                        {showResult === 'correct' && (
-                            <span className="text-green-400 font-bold text-sm">البوابة تفتح...</span>
-                        )}
-                      </div>
+                                  return (
+                                      <button
+                                          key={idx}
+                                          type="button"
+                                          disabled={showResult === 'correct'}
+                                          onClick={() => handleOptionClick(idx)}
+                                          className={`relative px-4 py-2.5 md:py-3.5 rounded-xl text-base md:text-lg font-bold transition-all duration-200 w-full ${btnClass} shadow-md active:scale-[0.98] cursor-pointer touch-manipulation`}
+                                      >
+                                          <span className="block">{opt}</span>
+                                          {icon && <span className="absolute right-3 top-1/2 -translate-y-1/2">{icon}</span>}
+                                      </button>
+                                  )
+                              })}
+                          </div>
 
+                          {/* Feedback Text */}
+                          <div className="h-6 md:h-8 mt-2 md:mt-4 flex items-center justify-center">
+                            {showResult === 'wrong' && (
+                                <span className="text-red-400 font-bold text-xs md:text-sm animate-pulse">حاول مرة أخرى!</span>
+                            )}
+                            {showResult === 'correct' && (
+                                <span className="text-green-400 font-bold text-xs md:text-sm">البوابة تفتح...</span>
+                            )}
+                          </div>
+
+                      </div>
                   </div>
               </div>
           </div>

@@ -6,8 +6,8 @@ export const GAMEPLAY_CAMERA_ZOOM = 1.10;
 export const MOBILE_BREAKPOINT_PX = 600;
 export const SHORT_HEIGHT_BREAKPOINT_PX = 500;
 
-export const GAMEPLAY_CAMERA_ZOOM_LANDSCAPE_MOBILE = 0.90;
-export const GAMEPLAY_CAMERA_ZOOM_PORTRAIT_MOBILE = 1.15;
+export const GAMEPLAY_CAMERA_ZOOM_LANDSCAPE_MOBILE = 0.75;
+export const GAMEPLAY_CAMERA_ZOOM_PORTRAIT_MOBILE = 0.85;
 
 export function getGameplayCameraZoom(viewWidth: number, viewHeight: number): number {
   if (viewHeight < SHORT_HEIGHT_BREAKPOINT_PX) return GAMEPLAY_CAMERA_ZOOM_LANDSCAPE_MOBILE;
