@@ -257,12 +257,12 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
       )}
 
       {/* 3. GAMEPLAY UI */}
-      <div className={`absolute inset-0 pointer-events-none flex flex-col justify-between p-4 md:p-6 z-10 transition-opacity duration-500 ${gameState.activeMessage ? 'opacity-0' : 'opacity-100'}`}>
+      <div className={`absolute inset-0 pointer-events-none flex flex-col justify-between p-1.5 sm:p-2.5 md:p-6 z-10 transition-opacity duration-500 ${gameState.activeMessage ? 'opacity-0' : 'opacity-100'}`}>
 
         {/* Step 2: Progress bar (top), then stars (left) / distance + hearts (right) */}
         <div className={`w-full transition-opacity duration-300 ${gameState.isGameOver ? 'opacity-0' : 'opacity-100'}`}>
-          {/* Progress bar – full width, 0–100% from distance */}
-          <div className="relative w-full h-2 md:h-2.5 rounded-full bg-black/50 border border-white/10 overflow-hidden mb-3">
+          {/* Progress bar – thin top strip */}
+          <div className="relative w-full h-1 md:h-2.5 rounded-full bg-black/50 border border-white/10 overflow-hidden mb-1.5 md:mb-3">
             <div
               className="h-full bg-gradient-to-r from-amber-600 to-[#ffd700] transition-all duration-150 ease-out rounded-full"
               style={{ width: `${progressPercent}%` }}
@@ -273,66 +273,65 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
           </div>
           <div className="flex justify-between items-start w-full">
             {/* Stars – top left */}
-            <div className="bg-black/40 backdrop-blur-md px-3.5 py-2.5 md:px-5 md:py-3 rounded-xl border border-white/10 shadow-lg">
-              <div className="flex flex-col items-center leading-tight text-yellow-400">
-                <span className="text-yellow-400/60 text-[10px] md:text-xs uppercase tracking-widest font-bold">النجوم</span>
-                <span className="text-xl md:text-2xl font-black">{gameState.stars}</span>
+            <div className="bg-black/40 backdrop-blur-md px-2 py-1 md:px-5 md:py-3 rounded-lg md:rounded-xl border border-white/10 shadow-lg">
+              <div className="flex items-baseline gap-1.5 md:flex-col md:items-center md:gap-0 leading-tight text-yellow-400">
+                <span className="text-yellow-400/60 text-[8px] md:text-xs uppercase tracking-widest font-bold">النجوم</span>
+                <span className="text-sm md:text-2xl font-black">{gameState.stars}</span>
               </div>
             </div>
             {/* Distance + Hearts + Audio + Pause – top right */}
-            <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-1 md:gap-3">
               {/* Pause button (player icon) – only when playing and not game over */}
               {!gameState.isGameOver && gameState.isPaused !== true && onPauseClick && (
                 <button
                   type="button"
                   onClick={onPauseClick}
-                  className="p-1.5 md:p-2 rounded-lg bg-black/40 border border-white/10 hover:bg-black/60 hover:border-[#ffd700]/40 transition-colors pointer-events-auto"
+                  className="p-1 md:p-2 rounded-md md:rounded-lg bg-black/40 border border-white/10 hover:bg-black/60 hover:border-[#ffd700]/40 transition-colors pointer-events-auto"
                   title="إيقاف مؤقت"
                   aria-label="Pause"
                 >
-                  <span className="text-lg md:text-xl">⏸</span>
+                  <span className="text-xs md:text-xl">⏸</span>
                 </button>
               )}
               {/* Step 5 – Audio: Sound & Music toggles (persisted in localStorage) */}
-              <div className="flex items-center gap-1 pointer-events-auto">
+              <div className="flex items-center gap-0.5 md:gap-1 pointer-events-auto">
                 {onSoundToggle && (
                   <button
                     type="button"
                     onClick={onSoundToggle}
-                    className="p-1.5 md:p-2 rounded-lg bg-black/40 border border-white/10 hover:bg-black/60 hover:border-[#ffd700]/40 transition-colors"
+                    className="p-1 md:p-2 rounded-md md:rounded-lg bg-black/40 border border-white/10 hover:bg-black/60 hover:border-[#ffd700]/40 transition-colors"
                     title={gameState.soundEnabled !== false ? 'إيقاف الصوت' : 'تشغيل الصوت'}
                     aria-label={gameState.soundEnabled !== false ? 'Sound on' : 'Sound off'}
                   >
-                    <span className="text-lg md:text-xl">{gameState.soundEnabled !== false ? '🔊' : '🔇'}</span>
+                    <span className="text-xs md:text-xl">{gameState.soundEnabled !== false ? '🔊' : '🔇'}</span>
                   </button>
                 )}
                 {onMusicToggle && (
                   <button
                     type="button"
                     onClick={onMusicToggle}
-                    className={`p-1.5 md:p-2 rounded-lg bg-black/40 border border-white/10 hover:bg-black/60 hover:border-[#ffd700]/40 transition-colors ${gameState.musicEnabled === false ? 'opacity-60' : ''}`}
+                    className={`p-1 md:p-2 rounded-md md:rounded-lg bg-black/40 border border-white/10 hover:bg-black/60 hover:border-[#ffd700]/40 transition-colors ${gameState.musicEnabled === false ? 'opacity-60' : ''}`}
                     title={gameState.musicEnabled !== false ? 'إيقاف الموسيقى' : 'تشغيل الموسيقى'}
                     aria-label={gameState.musicEnabled !== false ? 'Music on' : 'Music off'}
                   >
-                    <span className="text-lg md:text-xl">🎵</span>
+                    <span className="text-xs md:text-xl">🎵</span>
                   </button>
                 )}
               </div>
-              <div className="bg-black/40 backdrop-blur-md px-3.5 py-2.5 md:px-5 md:py-3 rounded-xl border border-white/10 shadow-lg">
-                <div className="flex flex-col items-center leading-tight">
-                  <span className="text-white/60 text-[10px] md:text-xs uppercase tracking-widest font-bold">المسافة</span>
-                  <span className="text-white text-xl md:text-2xl font-black font-mono tracking-tighter">
-                    {Math.floor(displayDistance)}<span className="text-sm text-white/50 mr-0.5">م</span>
+              <div className="bg-black/40 backdrop-blur-md px-2 py-1 md:px-5 md:py-3 rounded-lg md:rounded-xl border border-white/10 shadow-lg">
+                <div className="flex items-baseline gap-1.5 md:flex-col md:items-center md:gap-0 leading-tight">
+                  <span className="text-white/60 text-[8px] md:text-xs uppercase tracking-widest font-bold">المسافة</span>
+                  <span className="text-white text-sm md:text-2xl font-black font-mono tracking-tighter">
+                    {Math.floor(displayDistance)}<span className="text-[10px] md:text-sm text-white/50 mr-0.5">م</span>
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 md:gap-2 flex-row-reverse">
+              <div className="flex items-center gap-1 md:gap-2 flex-row-reverse">
                 {gameState.hearts <= 3 ? (
-                  // Up to 3 hearts: show one icon per life (max 3)
                   Array.from({ length: 3 }).map((_, i) => (
                     <div
                       key={i}
-                      className={`w-6 h-6 md:w-7 md:h-7 transform transition-all duration-300 ${
+                      className={`w-4 h-4 md:w-7 md:h-7 transform transition-all duration-300 ${
                         i < gameState.hearts ? 'scale-110' : 'scale-90 opacity-30 grayscale'
                       }`}
                     >
@@ -349,9 +348,8 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                     </div>
                   ))
                 ) : (
-                  // More than 3: single heart + count
                   <>
-                    <div className="w-6 h-6 md:w-7 md:h-7 transform scale-110">
+                    <div className="w-4 h-4 md:w-7 md:h-7 transform scale-110">
                       <svg
                         viewBox="0 0 24 24"
                         fill="currentColor"
@@ -361,7 +359,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                       </svg>
                     </div>
-                    <span className="px-1.5 md:px-2 py-0.5 rounded-full bg-black/60 border border-white/15 text-sm md:text-base font-extrabold text-white">
+                    <span className="px-1 md:px-2 py-0.5 rounded-full bg-black/60 border border-white/15 text-[10px] md:text-base font-extrabold text-white">
                       {gameState.hearts}
                     </span>
                   </>
@@ -371,8 +369,8 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
           </div>
         </div>
 
-        {/* Cinematic Vignette */}
-        <div className="absolute bottom-0 left-0 w-full h-24 md:h-40 bg-gradient-to-t from-[#1a1625]/80 to-transparent pointer-events-none" />
+        {/* Cinematic Vignette — short on mobile so it doesn't visually frame/shrink the gameplay area */}
+        <div className="absolute bottom-0 left-0 w-full h-10 md:h-40 bg-gradient-to-t from-[#1a1625]/60 md:from-[#1a1625]/80 to-transparent pointer-events-none" />
       </div>
 
       {/* MAGIC GATE QUESTION POPUP */}

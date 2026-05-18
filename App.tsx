@@ -7,6 +7,7 @@ import { HomeUI } from './components/HomeUI';
 import { HowToPlayUI } from './components/HowToPlayUI';
 import { GameDetailsUI } from './components/GameDetailsUI';
 import { AgeSelectionUI } from './components/AgeSelectionUI';
+import { OrientationLockUI } from './components/OrientationLockUI';
 import { GameState, AgeGroup } from './types';
 import { MainScene } from './game/scenes/MainScene';
 import { HomeScene } from './game/scenes/HomeScene';
@@ -23,6 +24,26 @@ function App() {
   
   // Game Flow: intro_gate -> home -> how_to_play -> age_select -> game_details -> playing
   const [gameStatus, setGameStatus] = useState<GameStatus>('intro_gate');
+
+  // Orientation lock: on small (mobile) viewports, force landscape so the gameplay
+  // aspect matches the desktop framing. Tablets and desktops are unaffected.
+  const [needsRotate, setNeedsRotate] = useState(false);
+  useEffect(() => {
+    const check = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const isMobileSized = Math.min(w, h) < 600;
+      const isPortrait = h > w;
+      setNeedsRotate(isMobileSized && isPortrait);
+    };
+    check();
+    window.addEventListener('resize', check);
+    window.addEventListener('orientationchange', check);
+    return () => {
+      window.removeEventListener('resize', check);
+      window.removeEventListener('orientationchange', check);
+    };
+  }, []);
   
   const [gameState, setGameState] = useState<GameState>({
     distance: 0,
@@ -573,6 +594,9 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Orientation lock — last so it sits on top of every other UI */}
+      {needsRotate && <OrientationLockUI />}
     </div>
   );
 }
