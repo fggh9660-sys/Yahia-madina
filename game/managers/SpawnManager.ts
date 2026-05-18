@@ -690,6 +690,13 @@ export class SpawnManager {
   }
 
   private addStar(x: number, y: number) {
+      // Clamp Y to the camera's visible area so high-spawned stars (groundY - 350 etc.)
+      // designed for tall desktop viewports don't fall off the top of short mobile screens.
+      const cam = this.scene.cameras?.main;
+      if (cam) {
+          const visibleTop = cam.scrollY + 40;
+          if (y < visibleTop) y = visibleTop;
+      }
       this.stars.add(new Star(this.scene, x, y));
   }
 

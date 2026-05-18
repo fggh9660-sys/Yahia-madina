@@ -6,8 +6,8 @@ export const GAMEPLAY_CAMERA_ZOOM = 1.10;
 export const MOBILE_BREAKPOINT_PX = 600;
 export const SHORT_HEIGHT_BREAKPOINT_PX = 500;
 
-export const GAMEPLAY_CAMERA_ZOOM_LANDSCAPE_MOBILE = 0.75;
-export const GAMEPLAY_CAMERA_ZOOM_PORTRAIT_MOBILE = 0.85;
+export const GAMEPLAY_CAMERA_ZOOM_LANDSCAPE_MOBILE = 1.10;
+export const GAMEPLAY_CAMERA_ZOOM_PORTRAIT_MOBILE = 1.10;
 
 export function getGameplayCameraZoom(viewWidth: number, viewHeight: number): number {
   if (viewHeight < SHORT_HEIGHT_BREAKPOINT_PX) return GAMEPLAY_CAMERA_ZOOM_LANDSCAPE_MOBILE;
@@ -19,9 +19,11 @@ export const TOUCH_BTN = {
   SIZE_DESKTOP: 84,
   SIZE_COMPACT: 56,
   EDGE_MARGIN_DESKTOP: 80,
-  EDGE_MARGIN_COMPACT: 12,
+  EDGE_MARGIN_COMPACT: 52,
+  EDGE_MARGIN_PORTRAIT: 72,
   BOTTOM_MARGIN_DESKTOP: 28,
-  BOTTOM_MARGIN_COMPACT: 16,
+  BOTTOM_MARGIN_COMPACT: 22,
+  BOTTOM_MARGIN_PORTRAIT: 64,
   GAP_DESKTOP: 48,
   GAP_COMPACT: 16,
   ICON_SIZE_DESKTOP: 36,
@@ -29,13 +31,23 @@ export const TOUCH_BTN = {
 };
 
 export function getTouchButtonLayout(viewWidth: number, viewHeight: number) {
-  const isCompact = viewWidth < MOBILE_BREAKPOINT_PX || viewHeight < SHORT_HEIGHT_BREAKPOINT_PX;
+  const isLandscapeShort = viewHeight < SHORT_HEIGHT_BREAKPOINT_PX;
+  const isPortraitMobile = viewWidth < MOBILE_BREAKPOINT_PX && !isLandscapeShort;
+  const isCompact = isLandscapeShort || isPortraitMobile;
   return {
     size: isCompact ? TOUCH_BTN.SIZE_COMPACT : TOUCH_BTN.SIZE_DESKTOP,
-    edgeMargin: isCompact ? TOUCH_BTN.EDGE_MARGIN_COMPACT : TOUCH_BTN.EDGE_MARGIN_DESKTOP,
+    edgeMargin: isPortraitMobile
+      ? TOUCH_BTN.EDGE_MARGIN_PORTRAIT
+      : isCompact
+        ? TOUCH_BTN.EDGE_MARGIN_COMPACT
+        : TOUCH_BTN.EDGE_MARGIN_DESKTOP,
     gap: isCompact ? TOUCH_BTN.GAP_COMPACT : TOUCH_BTN.GAP_DESKTOP,
     iconSize: isCompact ? TOUCH_BTN.ICON_SIZE_COMPACT : TOUCH_BTN.ICON_SIZE_DESKTOP,
-    bottomMargin: isCompact ? TOUCH_BTN.BOTTOM_MARGIN_COMPACT : TOUCH_BTN.BOTTOM_MARGIN_DESKTOP,
+    bottomMargin: isPortraitMobile
+      ? TOUCH_BTN.BOTTOM_MARGIN_PORTRAIT
+      : isCompact
+        ? TOUCH_BTN.BOTTOM_MARGIN_COMPACT
+        : TOUCH_BTN.BOTTOM_MARGIN_DESKTOP,
   };
 }
 
