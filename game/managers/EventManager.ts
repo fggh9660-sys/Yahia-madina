@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PROGRESS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
+import { PROGRESS, BRIDGE_WIND, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
 import { MainScene } from '../scenes/MainScene';
 import { MagicGate } from '../objects/MagicGate';
 import { MagicChest } from '../objects/MagicChest';
@@ -10,16 +10,17 @@ import { MagicCarpet } from '../objects/MagicCarpet';
 import { Obstacle } from '../objects/Obstacle';
 import type { ActivePuzzle } from '../../types';
 
-export type EventPhase = 
-    'NONE' | 
+export type EventPhase =
+    'NONE' |
     'NUR_INTRO' |
-    'INTRO_RUN' | 
+    'INTRO_RUN' |
     'LEVEL_END_APPROACH' | 'LEVEL_END_GATE' | 'LEVEL_TRANSITION' |
     'STAGE_2_INTRO' |
-    'RECOVERY' | 
-    'SANDSTORM_ONSET' | 'SANDSTORM_WALK' | 'SANDSTORM_APPROACH' | 'SANDSTORM_SHELTER' | 
-    'LIBRARY_APPROACH' | 'LIBRARY_ENTRY' | 
-    'CARPET_RIDE' | 
+    'RECOVERY' |
+    'SANDSTORM_ONSET' | 'SANDSTORM_WALK' | 'SANDSTORM_APPROACH' | 'SANDSTORM_SHELTER' |
+    'BRIDGE_WIND' |
+    'LIBRARY_APPROACH' | 'LIBRARY_ENTRY' |
+    'CARPET_RIDE' |
     'HANGING';
 
 export type EncounterType = 'NONE' | 'GATE' | 'CHEST' | 'CARPET';
@@ -88,6 +89,10 @@ export class EventManager {
   // Tutorial Flags for Flow
   private hasTriggeredRooftopTutorial: boolean = false;
 
+  // Bridge wind set-piece (Day 2)
+  public bridgeWindTriggered: boolean = false;
+  private bridgeWindStartDistance: number = 0;
+
   // Puzzle sequences (storm: 3–5 puzzles; library: 3–5 puzzles)
   private stormPuzzleQueue: ActivePuzzle[] = [];
   private stormPuzzleIndex: number = 0;
@@ -103,6 +108,7 @@ export class EventManager {
   }
 
   public update(frameMove: number, delta: number) {
+      this.checkBridgeWindExit();
       if (this.currentGate) {
           if (this.currentGate.active) this.currentGate.update(frameMove);
           else this.currentGate = null;
@@ -712,6 +718,30 @@ export class EventManager {
       return true;
   }
 
+  /**
+   * Wind bridge set-piece (Day 2): enters BRIDGE_WIND phase as the player approaches
+   * the library. Persistent lateral wind force is applied to the player; visuals + audio
+   * are still TODO (Step 3). Phase auto-exits after BRIDGE_WIND.SEGMENT_LENGTH_M meters.
+   */
+  public triggerBridgeWind(): boolean {
+      if (this.bridgeWindTriggered) return false;
+      if (this.eventPhase !== 'NONE') return false;
+      this.bridgeWindTriggered = true;
+      this.bridgeWindStartDistance = this.scene.getRunDistance();
+      this.eventPhase = 'BRIDGE_WIND';
+      this.scene.showNoorMessage("احذر! الرياح القوية على الجسر! 🌬️", false, 'warning');
+      return true;
+  }
+
+  /** Called every frame while bridge phase is active; exits the phase when segment length is covered. */
+  private checkBridgeWindExit() {
+      if (this.eventPhase !== 'BRIDGE_WIND') return;
+      const distInBridge = this.scene.getRunDistance() - this.bridgeWindStartDistance;
+      if (distInBridge >= BRIDGE_WIND.SEGMENT_LENGTH_M) {
+          this.eventPhase = 'NONE';
+      }
+  }
+
   private triggerLibraryArrival() {
       this.eventPhase = 'LIBRARY_ENTRY';
       this.scene.setGameSpeed(0);
@@ -1008,7 +1038,9 @@ export class EventManager {
       this.levelEndTriggered = false;
       this.hasTransitionedToCity = false;
       this.hasTriggeredRooftopTutorial = false;
-      
+      this.bridgeWindTriggered = false;
+      this.bridgeWindStartDistance = 0;
+
       // Reset Carpet Logic
       this.carpetMissed = false;
       this.nextCarpetSpawnPos = 0;

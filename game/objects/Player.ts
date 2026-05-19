@@ -757,10 +757,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   destroy(fromScene?: boolean): void {
-      // Detach the resize listener so it can't fire on a destroyed instance after scene shutdown.
       if (this.scene?.scale) {
           this.scene.scale.off('resize', this.layoutTouchButtons, this);
       }
+      // Kill infinite tweens on the aura sprites + dust emitter so they don't keep firing on
+      // destroyed targets after scene shutdown (memory leak across scene.restart()).
+      if (this.scene?.tweens) {
+          if (this.comboAura) this.scene.tweens.killTweensOf(this.comboAura);
+          if (this.shieldAura) this.scene.tweens.killTweensOf(this.shieldAura);
+      }
+      if (this.comboAura?.active) this.comboAura.destroy();
+      if (this.shieldAura?.active) this.shieldAura.destroy();
+      if (this.dustEmitter?.active) this.dustEmitter.destroy();
+      if (this.carpetSprite?.active) this.carpetSprite.destroy();
       super.destroy(fromScene);
   }
 

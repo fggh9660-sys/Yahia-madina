@@ -42,7 +42,10 @@ export class AudioManager {
   private playOneShot(key: string, volume: number = SFX_VOLUME, detune: number = 0): void {
     if (!this._soundEnabled) return;
     if (!this.scene.cache.audio.exists(key)) return;
-    this.scene.sound.add(key).play({ volume, detune });
+    const snd = this.scene.sound.add(key);
+    snd.once(Phaser.Sound.Events.COMPLETE, () => snd.destroy());
+    snd.once(Phaser.Sound.Events.STOP, () => snd.destroy());
+    snd.play({ volume, detune });
   }
 
   /** Stop any long-playing/looping audio (sandstorm, magic-gate) so they never overlap. */
