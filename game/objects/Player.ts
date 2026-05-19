@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PERFECT_JUMP, COMBO, getPlayerStartX, getPlayerSpawnY, getTouchButtonLayout } from '../../constants';
+import { PHYSICS, PERFECT_JUMP, COMBO, BRIDGE_WIND, getPlayerStartX, getPlayerSpawnY, getTouchButtonLayout } from '../../constants';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   // ... (Keep existing declarations) ...
@@ -563,12 +563,31 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const isTweening = this.scene.tweens.isTweening(this);
     
     const startX = getPlayerStartX(this.scene.scale.width);
+    const sceneAny = this.scene as { eventManager?: { eventPhase?: string } };
+    const inBridgeWind = sceneAny.eventManager?.eventPhase === 'BRIDGE_WIND';
     if (this.isStruggling && onGround && !isTweening) {
         const wobble = Math.sin(time * 0.015);
         const jitter = (Math.random() - 0.5) * 0.05;
         this.setRotation(0.05 + (wobble * 0.05) + jitter);
         const stepPush = Math.sin(time * 0.02) * 2;
         this.x = startX + stepPush;
+    } else if (inBridgeWind && !isTweening) {
+        // Bridge wind: constant lateral wind + A/D counter on ground or air. Clamp drift.
+        const leftHeld = this.cursors?.left.isDown || this.leftKeyA?.isDown || this.isHoldingLeft;
+        const rightHeld = this.cursors?.right.isDown || this.rightKeyD?.isDown || this.isHoldingRight;
+        let vx = BRIDGE_WIND.WIND_FORCE_X;
+        if (rightHeld && !leftHeld) vx += BRIDGE_WIND.PLAYER_COUNTER_FORCE;
+        else if (leftHeld && !rightHeld) vx -= BRIDGE_WIND.PLAYER_COUNTER_FORCE * 0.5;
+        body.setVelocityX(vx);
+
+        const offset = this.x - startX;
+        if (offset < -BRIDGE_WIND.X_DRIFT_MAX) {
+            this.x = startX - BRIDGE_WIND.X_DRIFT_MAX;
+            if (body.velocity.x < 0) body.setVelocityX(0);
+        } else if (offset > BRIDGE_WIND.X_DRIFT_MAX) {
+            this.x = startX + BRIDGE_WIND.X_DRIFT_MAX;
+            if (body.velocity.x > 0) body.setVelocityX(0);
+        }
     } else if (!onGround && !isTweening) {
         // Limited mid-air steering — auto-runner identity preserved by capping the offset
         const leftHeld = this.cursors?.left.isDown || this.leftKeyA?.isDown || this.isHoldingLeft;

@@ -730,6 +730,7 @@ export class EventManager {
       this.bridgeWindStartDistance = this.scene.getRunDistance();
       this.eventPhase = 'BRIDGE_WIND';
       this.scene.showNoorMessage("احذر! الرياح القوية على الجسر! 🌬️", false, 'warning');
+      this.scene.setBridgeWindActive?.(true);
       return true;
   }
 
@@ -739,6 +740,7 @@ export class EventManager {
       const distInBridge = this.scene.getRunDistance() - this.bridgeWindStartDistance;
       if (distInBridge >= BRIDGE_WIND.SEGMENT_LENGTH_M) {
           this.eventPhase = 'NONE';
+          this.scene.setBridgeWindActive?.(false);
       }
   }
 

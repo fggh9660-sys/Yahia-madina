@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, BRIDGE_WIND, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
 import { NOOR_BOND_REWARDS, getBondTier, getBondTierDef, getNextTierThreshold, getCurrentTierFloor } from '../../data/noorBond';
 import { Player } from '../objects/Player';
 import { Obstacle } from '../objects/Obstacle';
@@ -77,6 +77,8 @@ export class MainScene extends Phaser.Scene {
 
   private speedLinesTop: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   private speedLinesBottom: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
+
+  private bridgeWindEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
   // UI State
   private activeMessage: string | null = null; 
@@ -399,6 +401,7 @@ export class MainScene extends Phaser.Scene {
     this.bondHudLabel = null;
     this.speedLinesTop = null;
     this.speedLinesBottom = null;
+    this.bridgeWindEmitter = null;
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
@@ -939,6 +942,35 @@ export class MainScene extends Phaser.Scene {
 
       this.speedLinesTop = makeEmitter(topCenter);
       this.speedLinesBottom = makeEmitter(botCenter);
+  }
+
+  /**
+   * Bridge wind set-piece — visual dust streaks while BRIDGE_WIND phase is active.
+   * Reuses the speed_streak texture from speed lines for consistency. Called by
+   * EventManager when entering/exiting the phase.
+   */
+  public setBridgeWindActive(active: boolean) {
+      if (active) {
+          if (!this.bridgeWindEmitter) {
+              const W = this.scale.width;
+              const H = this.scale.height;
+              this.bridgeWindEmitter = this.add.particles(0, 0, 'speed_streak', {
+                  x: W + 60,
+                  y: { min: H * 0.15, max: H * 0.85 },
+                  speedX: { min: BRIDGE_WIND.DUST_PARTICLE_SPEED_X_MIN, max: BRIDGE_WIND.DUST_PARTICLE_SPEED_X_MAX },
+                  lifespan: BRIDGE_WIND.DUST_PARTICLE_LIFESPAN_MS,
+                  alpha: { start: 0.65, end: 0 },
+                  scaleX: { min: 0.8, max: 1.6 },
+                  scaleY: { min: 0.6, max: 1.0 },
+                  quantity: 2,
+                  frequency: BRIDGE_WIND.DUST_PARTICLE_EMIT_MS,
+                  emitting: false,
+              }).setDepth(14).setScrollFactor(0);
+          }
+          this.bridgeWindEmitter.start();
+      } else if (this.bridgeWindEmitter?.active) {
+          this.bridgeWindEmitter.stop();
+      }
   }
 
   private setSpeedLinesTier(tier: number) {
