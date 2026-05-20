@@ -79,6 +79,9 @@ export class MainScene extends Phaser.Scene {
   private speedLinesBottom: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
   private bridgeWindEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
+  private bridgeOverlay: Phaser.GameObjects.Graphics | null = null;
+  private bridgeBanners: Phaser.GameObjects.Sprite[] = [];
+  private bridgeBannerTimer: number = 0;
 
   // UI State
   private activeMessage: string | null = null; 
@@ -402,6 +405,9 @@ export class MainScene extends Phaser.Scene {
     this.speedLinesTop = null;
     this.speedLinesBottom = null;
     this.bridgeWindEmitter = null;
+    this.bridgeOverlay = null;
+    this.bridgeBanners = [];
+    this.bridgeBannerTimer = 0;
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
@@ -467,8 +473,10 @@ export class MainScene extends Phaser.Scene {
     this.environmentManager.update(time, scaledDelta, frameMove);
     this.player.update(time, scaledDelta);
     this.spawnManager.update(scaledDelta, frameMove, currentSpeed);
-    this.eventManager.update(frameMove, scaledDelta); 
+    this.eventManager.update(frameMove, scaledDelta);
     this.eventManager.handleEncounterPause(this.player.x);
+
+    this.updateBridgeBanners(frameMove, scaledDelta);
     
     // Check dynamic overlaps (Carpet)
     this.collisionManager.checkDynamicOverlaps();
@@ -950,26 +958,138 @@ export class MainScene extends Phaser.Scene {
    * EventManager when entering/exiting the phase.
    */
   public setBridgeWindActive(active: boolean) {
+      const W = this.scale.width;
+      const H = this.scale.height;
+
       if (active) {
+          // Entry telegraphing — directional shake + hit-stop so the player feels the moment.
+          this.cameras.main.shake(
+              BRIDGE_WIND.ENTRY_SHAKE_MS,
+              new Phaser.Math.Vector2(0, BRIDGE_WIND.ENTRY_SHAKE_INTENSITY),
+          );
+          this.hitStop(BRIDGE_WIND.ENTRY_HITSTOP_MS, BRIDGE_WIND.ENTRY_HITSTOP_SCALE);
+
+          // Ensure speed_streak texture exists (created lazily by initSpeedLines, but the
+          // bridge may fire before speed lines if combo never reached tier 2).
+          if (!this.textures.exists('speed_streak')) this.initSpeedLines();
+
+          // Dust streaks
           if (!this.bridgeWindEmitter) {
-              const W = this.scale.width;
-              const H = this.scale.height;
               this.bridgeWindEmitter = this.add.particles(0, 0, 'speed_streak', {
                   x: W + 60,
                   y: { min: H * 0.15, max: H * 0.85 },
                   speedX: { min: BRIDGE_WIND.DUST_PARTICLE_SPEED_X_MIN, max: BRIDGE_WIND.DUST_PARTICLE_SPEED_X_MAX },
                   lifespan: BRIDGE_WIND.DUST_PARTICLE_LIFESPAN_MS,
-                  alpha: { start: 0.65, end: 0 },
-                  scaleX: { min: 0.8, max: 1.6 },
-                  scaleY: { min: 0.6, max: 1.0 },
+                  alpha: { start: 0.7, end: 0 },
+                  scaleX: { min: 0.9, max: 1.7 },
+                  scaleY: { min: 0.7, max: 1.1 },
                   quantity: 2,
                   frequency: BRIDGE_WIND.DUST_PARTICLE_EMIT_MS,
                   emitting: false,
               }).setDepth(14).setScrollFactor(0);
           }
           this.bridgeWindEmitter.start();
-      } else if (this.bridgeWindEmitter?.active) {
-          this.bridgeWindEmitter.stop();
+
+          // Stone overlay along ground level
+          if (!this.bridgeOverlay) {
+              this.bridgeOverlay = this.add.graphics().setDepth(8).setScrollFactor(0);
+          }
+          this.drawBridgeOverlay();
+          this.bridgeOverlay.setAlpha(0);
+          this.tweens.add({
+              targets: this.bridgeOverlay,
+              alpha: 1,
+              duration: 350,
+          });
+
+          this.bridgeBannerTimer = 0;
+      } else {
+          if (this.bridgeWindEmitter?.active) this.bridgeWindEmitter.stop();
+          if (this.bridgeOverlay?.active) {
+              this.tweens.add({
+                  targets: this.bridgeOverlay,
+                  alpha: 0,
+                  duration: 400,
+              });
+          }
+      }
+  }
+
+  private drawBridgeOverlay() {
+      if (!this.bridgeOverlay) return;
+      const W = this.scale.width;
+      const H = this.scale.height;
+      const groundY = getPlayerSpawnY(H) + 39; // matches the ground surface
+      const h = BRIDGE_WIND.OVERLAY_HEIGHT;
+      this.bridgeOverlay.clear();
+      this.bridgeOverlay.fillStyle(BRIDGE_WIND.OVERLAY_COLOR, BRIDGE_WIND.OVERLAY_ALPHA);
+      this.bridgeOverlay.fillRect(0, groundY - h / 2, W, h);
+      this.bridgeOverlay.lineStyle(1, 0x2a2724, BRIDGE_WIND.OVERLAY_ALPHA);
+      this.bridgeOverlay.strokeRect(0, groundY - h / 2, W, h);
+  }
+
+  /** Generate a small banner-on-pole placeholder sprite and spawn at right edge. Caller pushes it
+   *  into bridgeBanners and scrolls each frame. */
+  private spawnBridgeBanner() {
+      const TEX_KEY = 'bridge_banner';
+      if (!this.textures.exists(TEX_KEY)) {
+          const w = 28;
+          const h = 88;
+          const canvas = this.textures.createCanvas(TEX_KEY, w, h);
+          if (canvas) {
+              const ctx = canvas.context;
+              // Pole
+              ctx.fillStyle = '#3a2f24';
+              ctx.fillRect(w / 2 - 1, 0, 2, h);
+              // Flag — simple trapezoid
+              ctx.fillStyle = `#${BRIDGE_WIND.BANNER_FLAG_COLOR.toString(16).padStart(6, '0')}`;
+              ctx.beginPath();
+              ctx.moveTo(w / 2, 6);
+              ctx.lineTo(w - 1, 12);
+              ctx.lineTo(w - 5, 26);
+              ctx.lineTo(w / 2, 32);
+              ctx.closePath();
+              ctx.fill();
+              canvas.refresh();
+          }
+      }
+
+      const H = this.scale.height;
+      const groundY = getPlayerSpawnY(H) + 39;
+      const banner = this.add.sprite(this.scale.width + 30, groundY - 44, TEX_KEY);
+      banner.setOrigin(0.5, 1).setDepth(12);
+      // Subtle flap tween via x-scale wobble
+      this.tweens.add({
+          targets: banner,
+          scaleX: { from: 1, to: 0.85 },
+          duration: 320,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+      });
+      this.bridgeBanners.push(banner);
+  }
+
+  private updateBridgeBanners(frameMove: number, delta: number) {
+      if (this.eventManager?.eventPhase === 'BRIDGE_WIND') {
+          this.bridgeBannerTimer += delta;
+          if (this.bridgeBannerTimer >= BRIDGE_WIND.BANNER_SPAWN_INTERVAL_MS) {
+              this.spawnBridgeBanner();
+              this.bridgeBannerTimer = 0;
+          }
+      }
+      for (let i = this.bridgeBanners.length - 1; i >= 0; i--) {
+          const banner = this.bridgeBanners[i];
+          if (!banner.active) {
+              this.bridgeBanners.splice(i, 1);
+              continue;
+          }
+          banner.x -= frameMove;
+          if (banner.x < -50) {
+              this.tweens.killTweensOf(banner);
+              banner.destroy();
+              this.bridgeBanners.splice(i, 1);
+          }
       }
   }
 
