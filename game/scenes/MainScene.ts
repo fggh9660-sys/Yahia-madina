@@ -80,6 +80,7 @@ export class MainScene extends Phaser.Scene {
 
   private bridgeWindEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   private bridgeOverlay: Phaser.GameObjects.Graphics | null = null;
+  private bridgeTint: Phaser.GameObjects.Graphics | null = null;
   private bridgeBanners: Phaser.GameObjects.Sprite[] = [];
   private bridgeBannerTimer: number = 0;
 
@@ -406,6 +407,7 @@ export class MainScene extends Phaser.Scene {
     this.speedLinesBottom = null;
     this.bridgeWindEmitter = null;
     this.bridgeOverlay = null;
+    this.bridgeTint = null;
     this.bridgeBanners = [];
     this.bridgeBannerTimer = 0;
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
@@ -962,55 +964,61 @@ export class MainScene extends Phaser.Scene {
       const H = this.scale.height;
 
       if (active) {
-          // Entry telegraphing — directional shake + hit-stop so the player feels the moment.
+          // Entry telegraphing — bigger shake + longer hit-stop for clear cinematic moment.
           this.cameras.main.shake(
               BRIDGE_WIND.ENTRY_SHAKE_MS,
               new Phaser.Math.Vector2(0, BRIDGE_WIND.ENTRY_SHAKE_INTENSITY),
           );
           this.hitStop(BRIDGE_WIND.ENTRY_HITSTOP_MS, BRIDGE_WIND.ENTRY_HITSTOP_SCALE);
+          this.audioManager?.playStarPitched(-400);
 
-          // Ensure speed_streak texture exists (created lazily by initSpeedLines, but the
-          // bridge may fire before speed lines if combo never reached tier 2).
           if (!this.textures.exists('speed_streak')) this.initSpeedLines();
 
-          // Dust streaks
+          // Full-screen tint — immediate atmospheric shift
+          if (!this.bridgeTint) {
+              this.bridgeTint = this.add.graphics().setDepth(7).setScrollFactor(0);
+          }
+          this.bridgeTint.clear();
+          this.bridgeTint.fillStyle(BRIDGE_WIND.TINT_COLOR, BRIDGE_WIND.TINT_ALPHA);
+          this.bridgeTint.fillRect(0, 0, W, H);
+          this.bridgeTint.setAlpha(0);
+          this.tweens.add({ targets: this.bridgeTint, alpha: 1, duration: 280 });
+
+          // Dust streaks — high density
           if (!this.bridgeWindEmitter) {
               this.bridgeWindEmitter = this.add.particles(0, 0, 'speed_streak', {
                   x: W + 60,
-                  y: { min: H * 0.15, max: H * 0.85 },
+                  y: { min: H * 0.10, max: H * 0.90 },
                   speedX: { min: BRIDGE_WIND.DUST_PARTICLE_SPEED_X_MIN, max: BRIDGE_WIND.DUST_PARTICLE_SPEED_X_MAX },
                   lifespan: BRIDGE_WIND.DUST_PARTICLE_LIFESPAN_MS,
-                  alpha: { start: 0.7, end: 0 },
-                  scaleX: { min: 0.9, max: 1.7 },
-                  scaleY: { min: 0.7, max: 1.1 },
-                  quantity: 2,
+                  alpha: { start: 0.85, end: 0 },
+                  scaleX: { min: 1.1, max: 2.0 },
+                  scaleY: { min: 0.8, max: 1.2 },
+                  quantity: 3,
                   frequency: BRIDGE_WIND.DUST_PARTICLE_EMIT_MS,
                   emitting: false,
               }).setDepth(14).setScrollFactor(0);
           }
           this.bridgeWindEmitter.start();
 
-          // Stone overlay along ground level
+          // Stone band overlay — thick + textured stripe at ground level
           if (!this.bridgeOverlay) {
-              this.bridgeOverlay = this.add.graphics().setDepth(8).setScrollFactor(0);
+              this.bridgeOverlay = this.add.graphics().setDepth(9).setScrollFactor(0);
           }
           this.drawBridgeOverlay();
           this.bridgeOverlay.setAlpha(0);
-          this.tweens.add({
-              targets: this.bridgeOverlay,
-              alpha: 1,
-              duration: 350,
-          });
+          this.tweens.add({ targets: this.bridgeOverlay, alpha: 1, duration: 280 });
 
           this.bridgeBannerTimer = 0;
+          // Spawn an entry pillar marker so the player has a clear "gate" they pass through
+          this.spawnBridgeEntryPillar();
       } else {
           if (this.bridgeWindEmitter?.active) this.bridgeWindEmitter.stop();
           if (this.bridgeOverlay?.active) {
-              this.tweens.add({
-                  targets: this.bridgeOverlay,
-                  alpha: 0,
-                  duration: 400,
-              });
+              this.tweens.add({ targets: this.bridgeOverlay, alpha: 0, duration: 400 });
+          }
+          if (this.bridgeTint?.active) {
+              this.tweens.add({ targets: this.bridgeTint, alpha: 0, duration: 400 });
           }
       }
   }
@@ -1019,13 +1027,68 @@ export class MainScene extends Phaser.Scene {
       if (!this.bridgeOverlay) return;
       const W = this.scale.width;
       const H = this.scale.height;
-      const groundY = getPlayerSpawnY(H) + 39; // matches the ground surface
+      const groundY = getPlayerSpawnY(H) + 39;
       const h = BRIDGE_WIND.OVERLAY_HEIGHT;
+      const top = groundY - h / 2;
       this.bridgeOverlay.clear();
+      // Base fill (warm stone)
       this.bridgeOverlay.fillStyle(BRIDGE_WIND.OVERLAY_COLOR, BRIDGE_WIND.OVERLAY_ALPHA);
-      this.bridgeOverlay.fillRect(0, groundY - h / 2, W, h);
-      this.bridgeOverlay.lineStyle(1, 0x2a2724, BRIDGE_WIND.OVERLAY_ALPHA);
-      this.bridgeOverlay.strokeRect(0, groundY - h / 2, W, h);
+      this.bridgeOverlay.fillRect(0, top, W, h);
+      // Top + bottom edges darker for definition
+      this.bridgeOverlay.fillStyle(0x2a2018, 0.75);
+      this.bridgeOverlay.fillRect(0, top, W, 3);
+      this.bridgeOverlay.fillRect(0, top + h - 3, W, 3);
+      // Repeating stripe pattern across the band — gives a "stone tile" feel
+      this.bridgeOverlay.fillStyle(0x2a2018, 0.4);
+      for (let x = 0; x < W; x += 48) {
+          this.bridgeOverlay.fillRect(x, top + 4, 2, h - 8);
+      }
+  }
+
+  private spawnBridgeEntryPillar() {
+      const TEX_KEY = 'bridge_entry_pillar';
+      if (!this.textures.exists(TEX_KEY)) {
+          const w = BRIDGE_WIND.ENTRY_PILLAR_WIDTH;
+          const h = BRIDGE_WIND.ENTRY_PILLAR_HEIGHT;
+          const canvas = this.textures.createCanvas(TEX_KEY, w, h);
+          if (canvas) {
+              const ctx = canvas.context;
+              // Pillar body
+              ctx.fillStyle = '#6b5a4a';
+              ctx.fillRect(0, 8, w, h - 8);
+              // Cap top
+              ctx.fillStyle = '#3a2f24';
+              ctx.fillRect(-2, 0, w + 4, 12);
+              // Darker shading line down center-right
+              ctx.fillStyle = '#3a2f24';
+              ctx.fillRect(w - 6, 8, 2, h - 8);
+              // Highlight line on left
+              ctx.fillStyle = '#8a7a6a';
+              ctx.fillRect(2, 10, 2, h - 12);
+              canvas.refresh();
+          }
+      }
+
+      const H = this.scale.height;
+      const groundY = getPlayerSpawnY(H) + 39;
+      const pillar = this.add.sprite(this.scale.width + 40, groundY, TEX_KEY);
+      pillar.setOrigin(0.5, 1).setDepth(13);
+      // Flag on top of pillar
+      if (this.textures.exists('bridge_banner')) {
+          const flag = this.add.sprite(pillar.x + 6, groundY - BRIDGE_WIND.ENTRY_PILLAR_HEIGHT + 18, 'bridge_banner');
+          flag.setOrigin(0.5, 0).setDepth(13).setScale(0.8);
+          this.tweens.add({
+              targets: flag,
+              scaleX: { from: 0.8, to: 0.6 },
+              duration: 280,
+              yoyo: true,
+              repeat: -1,
+              ease: 'Sine.easeInOut',
+          });
+          // Attach flag to pillar by pushing it through the same banner pool for scroll + cleanup
+          this.bridgeBanners.push(flag);
+      }
+      this.bridgeBanners.push(pillar);
   }
 
   /** Generate a small banner-on-pole placeholder sprite and spawn at right edge. Caller pushes it
