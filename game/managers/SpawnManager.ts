@@ -6,6 +6,7 @@ import { Heart } from '../objects/Heart';
 import { ShieldItem } from '../objects/ShieldItem';
 import { RewardBox } from '../objects/RewardBox';
 import { Obstacle, type ObstacleType } from '../objects/Obstacle';
+import { FallingDebris } from '../objects/FallingDebris';
 import { MerchantCart } from '../objects/MerchantCart';
 import { StackOfRugs } from '../objects/StackOfRugs';
 import { MarketAwning } from '../objects/MarketAwning';
@@ -21,10 +22,13 @@ export class SpawnManager {
   public shieldsGroup!: Phaser.GameObjects.Group;
   public rewardBoxesGroup!: Phaser.GameObjects.Group;
   public obstacles!: Phaser.GameObjects.Group;
+  public fallingDebris!: Phaser.GameObjects.Group;
   public merchantCarts!: Phaser.GameObjects.Group;
   public rugStacks!: Phaser.GameObjects.Group;
-  public marketAwnings!: Phaser.GameObjects.Group; 
+  public marketAwnings!: Phaser.GameObjects.Group;
   public cats!: Phaser.GameObjects.Group;
+  private lastFallingDebrisAt: number = 0;
+  private readonly FALLING_DEBRIS_INTERVAL_M = 70;
 
   private spawnTimer: number = 0;
   public nextSpawnTime: number = 100;
@@ -53,6 +57,8 @@ export class SpawnManager {
     this.shieldsGroup = this.scene.add.group({ classType: ShieldItem, runChildUpdate: false });
     this.rewardBoxesGroup = this.scene.add.group({ classType: RewardBox, runChildUpdate: false });
     this.obstacles = this.scene.add.group({ classType: Obstacle, runChildUpdate: false });
+    this.fallingDebris = this.scene.add.group({ classType: FallingDebris, runChildUpdate: false });
+    FallingDebris.generateTexture(this.scene);
     this.merchantCarts = this.scene.add.group({ classType: MerchantCart, runChildUpdate: false });
     this.rugStacks = this.scene.add.group({ classType: StackOfRugs, runChildUpdate: false });
     this.marketAwnings = this.scene.add.group({ classType: MarketAwning, runChildUpdate: false });
@@ -69,6 +75,7 @@ export class SpawnManager {
     this.shieldsGroup.clear(true, true);
     this.rewardBoxesGroup.clear(true, true);
     this.obstacles.clear(true, true);
+    this.fallingDebris.clear(true, true);
     this.merchantCarts.clear(true, true);
     this.rugStacks.clear(true, true);
     this.marketAwnings.clear(true, true);
@@ -94,6 +101,12 @@ export class SpawnManager {
     updateGroup(this.shieldsGroup);
     updateGroup(this.rewardBoxesGroup);
     updateGroup(this.obstacles);
+    this.fallingDebris.children.each((child: any) => {
+        if (child && child.active && typeof child.scrollWith === 'function') {
+            child.scrollWith(frameMove);
+        }
+        return true;
+    });
     updateGroup(this.merchantCarts);
     updateGroup(this.rugStacks);
     updateGroup(this.marketAwnings);
@@ -116,6 +129,14 @@ export class SpawnManager {
             this.lastShieldSpawnAt = runDistance;
             const sY = groundY - Phaser.Math.Between(minAboveGround, maxAboveGround);
             this.shieldsGroup.add(new ShieldItem(this.scene, this.scene.scale.width + 100, sY));
+        }
+        // Falling debris — only inside the city stage, periodic interval
+        const inCity = this.scene.environmentManager.getZone() === 'CITY';
+        if (inCity && runDistance - this.lastFallingDebrisAt >= this.FALLING_DEBRIS_INTERVAL_M) {
+            this.lastFallingDebrisAt = runDistance;
+            // Spawn debris ahead of the player so the shadow telegraph gives them reaction time.
+            const spawnX = this.scene.scale.width + 200;
+            this.fallingDebris.add(new FallingDebris(this.scene, spawnX, groundY));
         }
     }
 
@@ -705,6 +726,7 @@ export class SpawnManager {
       this.nextSpawnTime = 100;
       this.lastHeartSpawnAt = 0;
       this.lastShieldSpawnAt = 0;
+      this.lastFallingDebrisAt = 0;
       this.spawnCount = 0;
       this.spawnQueue = [];
       this.lastSpawnType = 'NONE';
@@ -715,6 +737,7 @@ export class SpawnManager {
       this.shieldsGroup.clear(true, true);
       this.rewardBoxesGroup.clear(true, true);
       this.obstacles.clear(true, true);
+      this.fallingDebris.clear(true, true);
       this.merchantCarts.clear(true, true);
       this.rugStacks.clear(true, true);
       this.marketAwnings.clear(true, true);

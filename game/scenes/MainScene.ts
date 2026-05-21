@@ -1028,21 +1028,58 @@ export class MainScene extends Phaser.Scene {
       const W = this.scale.width;
       const H = this.scale.height;
       const groundY = getPlayerSpawnY(H) + 39;
-      const h = BRIDGE_WIND.OVERLAY_HEIGHT;
-      const top = groundY - h / 2;
+      const bridgeTop = groundY - 8;
+      const bridgeH = BRIDGE_WIND.OVERLAY_HEIGHT;
+      const railH = BRIDGE_WIND.RAIL_HEIGHT;
+
       this.bridgeOverlay.clear();
-      // Base fill (warm stone)
-      this.bridgeOverlay.fillStyle(BRIDGE_WIND.OVERLAY_COLOR, BRIDGE_WIND.OVERLAY_ALPHA);
-      this.bridgeOverlay.fillRect(0, top, W, h);
-      // Top + bottom edges darker for definition
-      this.bridgeOverlay.fillStyle(0x2a2018, 0.75);
-      this.bridgeOverlay.fillRect(0, top, W, 3);
-      this.bridgeOverlay.fillRect(0, top + h - 3, W, 3);
-      // Repeating stripe pattern across the band — gives a "stone tile" feel
-      this.bridgeOverlay.fillStyle(0x2a2018, 0.4);
-      for (let x = 0; x < W; x += 48) {
-          this.bridgeOverlay.fillRect(x, top + 4, 2, h - 8);
+
+      // 1) Void chasm below the bridge — covers everything below the bridge surface to bottom of screen
+      const voidTop = bridgeTop + bridgeH;
+      const voidH = H - voidTop;
+      for (let i = 0; i < voidH; i++) {
+          const t = i / voidH;
+          const a = BRIDGE_WIND.VOID_TOP_ALPHA + (BRIDGE_WIND.VOID_BOTTOM_ALPHA - BRIDGE_WIND.VOID_TOP_ALPHA) * t;
+          const c = Phaser.Display.Color.Interpolate.ColorWithColor(
+              Phaser.Display.Color.IntegerToColor(BRIDGE_WIND.VOID_TOP_COLOR),
+              Phaser.Display.Color.IntegerToColor(BRIDGE_WIND.VOID_BOTTOM_COLOR),
+              100,
+              Math.floor(t * 100),
+          );
+          const hex = (c.r << 16) | (c.g << 8) | c.b;
+          this.bridgeOverlay.fillStyle(hex, a);
+          this.bridgeOverlay.fillRect(0, voidTop + i, W, 1);
       }
+
+      // Distant city silhouette dots in the void for depth
+      this.bridgeOverlay.fillStyle(0xffd700, 0.3);
+      for (let x = 0; x < W; x += 30) {
+          const dotY = voidTop + 24 + ((x * 13) % 28);
+          this.bridgeOverlay.fillCircle(x + 12, dotY, 1);
+      }
+
+      // 2) Top railing — continuous bar with periodic posts
+      this.bridgeOverlay.fillStyle(0x3a2f24, 1.0);
+      this.bridgeOverlay.fillRect(0, bridgeTop - railH, W, 4);
+      for (let x = 0; x < W; x += BRIDGE_WIND.RAIL_POST_INTERVAL_PX) {
+          this.bridgeOverlay.fillRect(x, bridgeTop - railH, 4, railH + 2);
+      }
+
+      // 3) Bridge top surface — stone band
+      this.bridgeOverlay.fillStyle(BRIDGE_WIND.OVERLAY_COLOR, BRIDGE_WIND.OVERLAY_ALPHA);
+      this.bridgeOverlay.fillRect(0, bridgeTop, W, bridgeH);
+      // Darker top + bottom edges for definition
+      this.bridgeOverlay.fillStyle(0x2a2018, 0.85);
+      this.bridgeOverlay.fillRect(0, bridgeTop, W, 3);
+      this.bridgeOverlay.fillRect(0, bridgeTop + bridgeH - 3, W, 3);
+      // Repeating stone-tile dividers
+      this.bridgeOverlay.fillStyle(0x2a2018, 0.55);
+      for (let x = 0; x < W; x += 56) {
+          this.bridgeOverlay.fillRect(x, bridgeTop + 4, 2, bridgeH - 8);
+      }
+      // Highlight band on top edge
+      this.bridgeOverlay.fillStyle(0x8a7a6a, 0.6);
+      this.bridgeOverlay.fillRect(0, bridgeTop + 4, W, 2);
   }
 
   private spawnBridgeEntryPillar() {

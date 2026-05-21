@@ -37,6 +37,7 @@ export class CollisionManager {
     this.scene.physics.add.collider(player, spawn.merchantCarts);
     this.scene.physics.add.collider(player, spawn.rugStacks);
     this.scene.physics.add.overlap(player, spawn.obstacles, this.handleHitObstacle, undefined, this);
+    this.scene.physics.add.overlap(player, spawn.fallingDebris, this.handleHitObstacle, undefined, this);
 
     // Fountain Collision (Solid, No Damage)
     if (env.roadside && env.roadside.fountains) {
