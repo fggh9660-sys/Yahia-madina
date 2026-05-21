@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PROGRESS, BRIDGE_WIND, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
+import { PROGRESS, BRIDGE_WIND, PHYSICS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
 import { MainScene } from '../scenes/MainScene';
 import { MagicGate } from '../objects/MagicGate';
 import { MagicChest } from '../objects/MagicChest';
@@ -89,9 +89,12 @@ export class EventManager {
   // Tutorial Flags for Flow
   private hasTriggeredRooftopTutorial: boolean = false;
 
-  // Bridge wind set-piece (Day 2)
+  // Bridge wind set-piece (Day 2 + Day 4 refinement)
   public bridgeWindTriggered: boolean = false;
   private bridgeWindStartDistance: number = 0;
+  public bridgeFell: boolean = false;
+  private bridgeGustTimers: Phaser.Time.TimerEvent[] = [];
+  public bridgeGustActive: boolean = false;
 
   // Puzzle sequences (storm: 3–5 puzzles; library: 3–5 puzzles)
   private stormPuzzleQueue: ActivePuzzle[] = [];
@@ -728,10 +731,37 @@ export class EventManager {
       if (this.eventPhase !== 'NONE') return false;
       this.bridgeWindTriggered = true;
       this.bridgeWindStartDistance = this.scene.getRunDistance();
+      this.bridgeFell = false;
       this.eventPhase = 'BRIDGE_WIND';
       this.scene.showNoorMessage("احذر! الرياح القوية على الجسر! 🌬️", false, 'warning');
       this.scene.setBridgeWindActive?.(true);
+
+      // Schedule periodic gusts during the bridge — distributed across the segment.
+      const segMs = (BRIDGE_WIND.SEGMENT_LENGTH_M / PROGRESS.DISTANCE_SCALE) / Math.max(1, PHYSICS.RUN_SPEED) * 1000;
+      const interval = segMs / (BRIDGE_WIND.GUST_COUNT + 1);
+      for (let i = 1; i <= BRIDGE_WIND.GUST_COUNT; i++) {
+          const t = this.scene.time.delayedCall(interval * i, () => this.fireGust());
+          this.bridgeGustTimers.push(t);
+      }
       return true;
+  }
+
+  /** Brief gust event during the bridge — strong wind spike + camera shake. */
+  private fireGust() {
+      if (this.eventPhase !== 'BRIDGE_WIND') return;
+      this.bridgeGustActive = true;
+      this.scene.cameras.main.shake(
+          BRIDGE_WIND.GUST_DURATION_MS,
+          new Phaser.Math.Vector2(BRIDGE_WIND.GUST_SHAKE_INTENSITY, BRIDGE_WIND.GUST_SHAKE_INTENSITY * 0.4),
+      );
+      this.scene.time.delayedCall(BRIDGE_WIND.GUST_DURATION_MS, () => { this.bridgeGustActive = false; });
+  }
+
+  /** 0..1 progress through the bridge segment. Used by Player.ts to escalate wind force. */
+  public getBridgeWindProgress(): number {
+      if (this.eventPhase !== 'BRIDGE_WIND') return 0;
+      const distInBridge = this.scene.getRunDistance() - this.bridgeWindStartDistance;
+      return Math.max(0, Math.min(1, distInBridge / BRIDGE_WIND.SEGMENT_LENGTH_M));
   }
 
   /** Called every frame while bridge phase is active; exits the phase when segment length is covered. */
@@ -741,6 +771,19 @@ export class EventManager {
       if (distInBridge >= BRIDGE_WIND.SEGMENT_LENGTH_M) {
           this.eventPhase = 'NONE';
           this.scene.setBridgeWindActive?.(false);
+          // Survival reward — player made it without falling
+          if (!this.bridgeFell) {
+              this.scene.addScore(BRIDGE_WIND.SURVIVAL_BONUS_SCORE);
+              const player = this.scene.player;
+              if (player) {
+                  this.scene.showFloatingText(player.x, player.y - 80, `+${BRIDGE_WIND.SURVIVAL_BONUS_SCORE} نجوت!`, '#ffd700');
+              }
+              this.scene.audioManager?.playStarPitched(800);
+          }
+          // Cancel any remaining gust timers
+          this.bridgeGustTimers.forEach(t => t.remove(false));
+          this.bridgeGustTimers = [];
+          this.bridgeGustActive = false;
       }
   }
 

@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, BRIDGE_WIND, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, BRIDGE_WIND, BALANCE_METER, SPEED_BOOST, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
 import { NOOR_BOND_REWARDS, getBondTier, getBondTierDef, getNextTierThreshold, getCurrentTierFloor } from '../../data/noorBond';
 import { Player } from '../objects/Player';
 import { Obstacle } from '../objects/Obstacle';
@@ -83,6 +83,10 @@ export class MainScene extends Phaser.Scene {
   private bridgeTint: Phaser.GameObjects.Graphics | null = null;
   private bridgeBanners: Phaser.GameObjects.Sprite[] = [];
   private bridgeBannerTimer: number = 0;
+  private balanceMeterBg: Phaser.GameObjects.Graphics | null = null;
+  private balanceMeterFill: Phaser.GameObjects.Graphics | null = null;
+  private balanceMeterIndicator: Phaser.GameObjects.Graphics | null = null;
+  private edgeTimeMs: number = 0;
 
   // UI State
   private activeMessage: string | null = null; 
@@ -410,6 +414,10 @@ export class MainScene extends Phaser.Scene {
     this.bridgeTint = null;
     this.bridgeBanners = [];
     this.bridgeBannerTimer = 0;
+    this.balanceMeterBg = null;
+    this.balanceMeterFill = null;
+    this.balanceMeterIndicator = null;
+    this.edgeTimeMs = 0;
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
@@ -755,9 +763,38 @@ export class MainScene extends Phaser.Scene {
   public setGameSpeed(modifier: number) {
       this.speedModifier = modifier;
   }
-  
+
   public getGameSpeed(): number {
       return this.speedModifier;
+  }
+
+  /**
+   * Speed boost pickup effect (Wk 1 Day 3): ramps speedModifier up to SPEED_BOOST.MULTIPLIER
+   * over RAMP_UP_MS, stays for DURATION_MS, then ramps back down to 1.0.
+   */
+  public triggerSpeedBoost() {
+      if (this.isGameOver || this.isPausedMenu) return;
+      this.audioManager?.playStarPitched(600);
+      this.tweens.killTweensOf({ proxy: 0 });
+      // Ramp up
+      this.tweens.add({
+          targets: this,
+          speedModifier: SPEED_BOOST.MULTIPLIER,
+          duration: SPEED_BOOST.RAMP_UP_MS,
+          ease: 'Sine.easeOut',
+      });
+      // Subtle camera punch for impact
+      this.cameras.main.shake(80, 0.004);
+      // Hold + ramp down
+      this.time.delayedCall(SPEED_BOOST.DURATION_MS, () => {
+          if (this.isGameOver) return;
+          this.tweens.add({
+              targets: this,
+              speedModifier: 1.0,
+              duration: SPEED_BOOST.RAMP_DOWN_MS,
+              ease: 'Sine.easeIn',
+          });
+      });
   }
 
   /** Called by Player when they execute a jump – dismiss first-jump soft pause so we never slow again. */
@@ -1171,12 +1208,16 @@ export class MainScene extends Phaser.Scene {
   }
 
   private updateBridgeBanners(frameMove: number, delta: number) {
-      if (this.eventManager?.eventPhase === 'BRIDGE_WIND') {
+      const isBridge = this.eventManager?.eventPhase === 'BRIDGE_WIND';
+      if (isBridge) {
           this.bridgeBannerTimer += delta;
           if (this.bridgeBannerTimer >= BRIDGE_WIND.BANNER_SPAWN_INTERVAL_MS) {
               this.spawnBridgeBanner();
               this.bridgeBannerTimer = 0;
           }
+          this.updateBalanceMeter(delta);
+      } else if (this.balanceMeterBg) {
+          this.hideBalanceMeter();
       }
       for (let i = this.bridgeBanners.length - 1; i >= 0; i--) {
           const banner = this.bridgeBanners[i];
@@ -1191,6 +1232,101 @@ export class MainScene extends Phaser.Scene {
               this.bridgeBanners.splice(i, 1);
           }
       }
+  }
+
+  private updateBalanceMeter(delta: number) {
+      if (!this.player) return;
+      const W = this.scale.width;
+      const H = this.scale.height;
+      const cx = W / 2;
+      const cy = H - BALANCE_METER.Y_FROM_BOTTOM;
+      const mw = BALANCE_METER.WIDTH;
+      const mh = BALANCE_METER.HEIGHT;
+      const left = cx - mw / 2;
+
+      const startX = getPlayerStartX(W);
+      const offset = this.player.x - startX;
+      const rawRatio = offset / BRIDGE_WIND.X_DRIFT_MAX;
+      const ratio = Math.max(-1, Math.min(1, rawRatio));
+      const absRatio = Math.abs(ratio);
+
+      if (!this.balanceMeterBg) {
+          this.balanceMeterBg = this.add.graphics().setDepth(498).setScrollFactor(0);
+      }
+      if (!this.balanceMeterFill) {
+          this.balanceMeterFill = this.add.graphics().setDepth(499).setScrollFactor(0);
+      }
+      if (!this.balanceMeterIndicator) {
+          this.balanceMeterIndicator = this.add.graphics().setDepth(500).setScrollFactor(0);
+      }
+
+      // Defensive: drop stale refs after scene.restart()
+      if (this.balanceMeterBg && !this.balanceMeterBg.active) { this.balanceMeterBg = null; return; }
+      if (this.balanceMeterFill && !this.balanceMeterFill.active) { this.balanceMeterFill = null; return; }
+      if (this.balanceMeterIndicator && !this.balanceMeterIndicator.active) { this.balanceMeterIndicator = null; return; }
+
+      this.balanceMeterBg.clear();
+      this.balanceMeterBg.fillStyle(BALANCE_METER.BG_COLOR, BALANCE_METER.BG_ALPHA);
+      this.balanceMeterBg.fillRect(left, cy - mh / 2, mw, mh);
+      this.balanceMeterBg.lineStyle(2, BALANCE_METER.BORDER_COLOR, BALANCE_METER.BORDER_ALPHA);
+      this.balanceMeterBg.strokeRect(left, cy - mh / 2, mw, mh);
+
+      // Color zones: center green, warn yellow, edge red
+      this.balanceMeterFill.clear();
+      const segW = mw / 6;
+      this.balanceMeterFill.fillStyle(BALANCE_METER.EDGE_COLOR, 0.7);
+      this.balanceMeterFill.fillRect(left + 2, cy - mh / 2 + 2, segW, mh - 4);
+      this.balanceMeterFill.fillRect(left + mw - segW - 2, cy - mh / 2 + 2, segW, mh - 4);
+      this.balanceMeterFill.fillStyle(BALANCE_METER.WARN_COLOR, 0.6);
+      this.balanceMeterFill.fillRect(left + segW + 2, cy - mh / 2 + 2, segW, mh - 4);
+      this.balanceMeterFill.fillRect(left + mw - 2 * segW - 2, cy - mh / 2 + 2, segW, mh - 4);
+      this.balanceMeterFill.fillStyle(BALANCE_METER.CENTER_COLOR, 0.6);
+      this.balanceMeterFill.fillRect(left + 2 * segW + 2, cy - mh / 2 + 2, segW * 2, mh - 4);
+
+      // Indicator
+      this.balanceMeterIndicator.clear();
+      const indX = cx + (ratio * (mw / 2 - BALANCE_METER.INDICATOR_W / 2));
+      let indColor = BALANCE_METER.INDICATOR_COLOR;
+      if (absRatio > BALANCE_METER.EDGE_THRESHOLD) indColor = BALANCE_METER.EDGE_COLOR;
+      else if (absRatio > BALANCE_METER.WARN_THRESHOLD) indColor = BALANCE_METER.WARN_COLOR;
+      this.balanceMeterIndicator.fillStyle(indColor, 1);
+      this.balanceMeterIndicator.fillRect(indX - BALANCE_METER.INDICATOR_W / 2, cy - BALANCE_METER.INDICATOR_H / 2, BALANCE_METER.INDICATOR_W, BALANCE_METER.INDICATOR_H);
+      this.balanceMeterIndicator.lineStyle(1, 0x000000, 0.8);
+      this.balanceMeterIndicator.strokeRect(indX - BALANCE_METER.INDICATOR_W / 2, cy - BALANCE_METER.INDICATOR_H / 2, BALANCE_METER.INDICATOR_W, BALANCE_METER.INDICATOR_H);
+
+      // Fall detection — if at edge for too long, trigger fall
+      if (absRatio >= BALANCE_METER.EDGE_THRESHOLD) {
+          this.edgeTimeMs += delta;
+          if (this.edgeTimeMs >= BRIDGE_WIND.FALL_EDGE_TIME_MS && this.player && !this.eventManager?.bridgeFell) {
+              this.triggerBridgeFall();
+          }
+      } else {
+          this.edgeTimeMs = 0;
+      }
+  }
+
+  private hideBalanceMeter() {
+      if (this.balanceMeterBg?.active) this.balanceMeterBg.clear();
+      if (this.balanceMeterFill?.active) this.balanceMeterFill.clear();
+      if (this.balanceMeterIndicator?.active) this.balanceMeterIndicator.clear();
+      this.edgeTimeMs = 0;
+  }
+
+  private triggerBridgeFall() {
+      if (!this.eventManager || this.eventManager.bridgeFell) return;
+      this.eventManager.bridgeFell = true;
+      this.cameras.main.shake(220, 0.014);
+      // Reset player to center + take damage
+      this.player.x = getPlayerStartX(this.scale.width);
+      this.player.setRotation(0);
+      this.damagePlayer();
+      this.audioManager?.playDamage();
+      this.showFloatingText(this.player.x, this.player.y - 60, "سقطت! 💢", '#ff4d4d');
+      this.edgeTimeMs = 0;
+      // Allow re-trigger after a grace period
+      this.time.delayedCall(1200, () => {
+          if (this.eventManager) this.eventManager.bridgeFell = false;
+      });
   }
 
   private setSpeedLinesTier(tier: number) {

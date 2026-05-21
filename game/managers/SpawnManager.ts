@@ -7,6 +7,7 @@ import { ShieldItem } from '../objects/ShieldItem';
 import { RewardBox } from '../objects/RewardBox';
 import { Obstacle, type ObstacleType } from '../objects/Obstacle';
 import { FallingDebris } from '../objects/FallingDebris';
+import { SpeedBoost } from '../objects/SpeedBoost';
 import { MerchantCart } from '../objects/MerchantCart';
 import { StackOfRugs } from '../objects/StackOfRugs';
 import { MarketAwning } from '../objects/MarketAwning';
@@ -23,12 +24,17 @@ export class SpawnManager {
   public rewardBoxesGroup!: Phaser.GameObjects.Group;
   public obstacles!: Phaser.GameObjects.Group;
   public fallingDebris!: Phaser.GameObjects.Group;
+  public speedBoosts!: Phaser.GameObjects.Group;
   public merchantCarts!: Phaser.GameObjects.Group;
   public rugStacks!: Phaser.GameObjects.Group;
   public marketAwnings!: Phaser.GameObjects.Group;
   public cats!: Phaser.GameObjects.Group;
   private lastFallingDebrisAt: number = 0;
+  private lastSpeedBoostAt: number = 0;
+  private lastJumpArcTrailAt: number = 0;
   private readonly FALLING_DEBRIS_INTERVAL_M = 70;
+  private readonly SPEED_BOOST_INTERVAL_M = 130;
+  private readonly JUMP_ARC_TRAIL_INTERVAL_M = 100;
 
   private spawnTimer: number = 0;
   public nextSpawnTime: number = 100;
@@ -59,6 +65,8 @@ export class SpawnManager {
     this.obstacles = this.scene.add.group({ classType: Obstacle, runChildUpdate: false });
     this.fallingDebris = this.scene.add.group({ classType: FallingDebris, runChildUpdate: false });
     FallingDebris.generateTexture(this.scene);
+    this.speedBoosts = this.scene.add.group({ classType: SpeedBoost, runChildUpdate: false });
+    SpeedBoost.generateTexture(this.scene);
     this.merchantCarts = this.scene.add.group({ classType: MerchantCart, runChildUpdate: false });
     this.rugStacks = this.scene.add.group({ classType: StackOfRugs, runChildUpdate: false });
     this.marketAwnings = this.scene.add.group({ classType: MarketAwning, runChildUpdate: false });
@@ -76,6 +84,7 @@ export class SpawnManager {
     this.rewardBoxesGroup.clear(true, true);
     this.obstacles.clear(true, true);
     this.fallingDebris.clear(true, true);
+    this.speedBoosts.clear(true, true);
     this.merchantCarts.clear(true, true);
     this.rugStacks.clear(true, true);
     this.marketAwnings.clear(true, true);
@@ -107,6 +116,7 @@ export class SpawnManager {
         }
         return true;
     });
+    updateGroup(this.speedBoosts);
     updateGroup(this.merchantCarts);
     updateGroup(this.rugStacks);
     updateGroup(this.marketAwnings);
@@ -134,9 +144,21 @@ export class SpawnManager {
         const inCity = this.scene.environmentManager.getZone() === 'CITY';
         if (inCity && runDistance - this.lastFallingDebrisAt >= this.FALLING_DEBRIS_INTERVAL_M) {
             this.lastFallingDebrisAt = runDistance;
-            // Spawn debris ahead of the player so the shadow telegraph gives them reaction time.
             const spawnX = this.scene.scale.width + 200;
             this.fallingDebris.add(new FallingDebris(this.scene, spawnX, groundY));
+        }
+        // Speed boost pickup — periodic interval, both desert and city. Spawn at jump-arc height.
+        if (runDistance - this.lastSpeedBoostAt >= this.SPEED_BOOST_INTERVAL_M) {
+            this.lastSpeedBoostAt = runDistance;
+            const boostY = groundY - Phaser.Math.Between(100, 180);
+            this.speedBoosts.add(new SpeedBoost(this.scene, this.scene.scale.width + 80, boostY));
+        }
+        // Jump-arc star trail — periodic; only spawns when no obstacles nearby (readability constraint per Yahia).
+        if (runDistance - this.lastJumpArcTrailAt >= this.JUMP_ARC_TRAIL_INTERVAL_M) {
+            if (this.isCurrentlyClear()) {
+                this.lastJumpArcTrailAt = runDistance;
+                this.spawnJumpArcTrail(this.scene.scale.width + 100, groundY);
+            }
         }
     }
 
@@ -151,6 +173,37 @@ export class SpawnManager {
             this.spawnPattern(currentSpeed);
         }
     }
+  }
+
+  /** Returns true if there are no obstacles currently in the right half of the screen,
+   *  so a jump-arc trail can spawn without overlapping a hazard cluster. */
+  private isCurrentlyClear(): boolean {
+      const halfW = this.scene.scale.width / 2;
+      let clear = true;
+      this.obstacles.children.each((child: any) => {
+          if (child && child.active && child.x > halfW) clear = false;
+          return true;
+      });
+      this.fallingDebris.children.each((child: any) => {
+          if (child && child.active && child.x > halfW) clear = false;
+          return true;
+      });
+      return clear;
+  }
+
+  /** Spawn a parabolic arc of stars matching the optimal jump trajectory. Yahia readability
+   *  constraint: only call when the surrounding area is clear of obstacles. */
+  private spawnJumpArcTrail(startX: number, groundY: number) {
+      const count = 7;
+      const arcWidth = 280;
+      const arcHeight = 130;
+      for (let i = 0; i < count; i++) {
+          const t = i / (count - 1);
+          const x = startX + t * arcWidth;
+          // Parabolic curve — peak at t=0.5
+          const y = groundY - 40 - arcHeight * (4 * t * (1 - t));
+          this.stars.add(new Star(this.scene, x, y));
+      }
   }
 
   private spawnPattern(currentSpeed: number) {
@@ -727,6 +780,7 @@ export class SpawnManager {
       this.lastHeartSpawnAt = 0;
       this.lastShieldSpawnAt = 0;
       this.lastFallingDebrisAt = 0;
+      this.lastSpeedBoostAt = 0;
       this.spawnCount = 0;
       this.spawnQueue = [];
       this.lastSpawnType = 'NONE';
@@ -738,6 +792,7 @@ export class SpawnManager {
       this.rewardBoxesGroup.clear(true, true);
       this.obstacles.clear(true, true);
       this.fallingDebris.clear(true, true);
+      this.speedBoosts.clear(true, true);
       this.merchantCarts.clear(true, true);
       this.rugStacks.clear(true, true);
       this.marketAwnings.clear(true, true);

@@ -5,6 +5,7 @@ import { Player } from '../objects/Player';
 import { Star } from '../objects/Star';
 import { Heart } from '../objects/Heart';
 import { ShieldItem } from '../objects/ShieldItem';
+import { SpeedBoost } from '../objects/SpeedBoost';
 import { RewardBox } from '../objects/RewardBox';
 import { MarketAwning } from '../objects/MarketAwning';
 import { MagicCarpet } from '../objects/MagicCarpet';
@@ -48,6 +49,7 @@ export class CollisionManager {
     this.scene.physics.add.overlap(player, spawn.stars, this.handleCollectStar, undefined, this);
     this.scene.physics.add.overlap(player, spawn.heartsGroup, this.handleCollectHeart, undefined, this);
     this.scene.physics.add.overlap(player, spawn.shieldsGroup, this.handleCollectShield, undefined, this);
+    this.scene.physics.add.overlap(player, spawn.speedBoosts, this.handleCollectSpeedBoost, undefined, this);
     this.scene.physics.add.overlap(player, spawn.rewardBoxesGroup, this.handleCollectRewardBox, undefined, this);
 
     // Magic Carpet Pickup (New)
@@ -138,6 +140,12 @@ export class CollisionManager {
 
   private handleCollectRewardBox(player: any, box: any) {
       (box as RewardBox).collect();
+  }
+
+  private handleCollectSpeedBoost(player: any, boost: any) {
+      (boost as SpeedBoost).collect();
+      this.scene.triggerSpeedBoost();
+      this.scene.showFloatingText((boost as SpeedBoost).x, (boost as SpeedBoost).y, `+ سرعة!`, '#ffaa00');
   }
 
   private handleHitObstacle(player: any, obstacle: any) {

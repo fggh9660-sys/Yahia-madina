@@ -563,7 +563,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const isTweening = this.scene.tweens.isTweening(this);
     
     const startX = getPlayerStartX(this.scene.scale.width);
-    const sceneAny = this.scene as { eventManager?: { eventPhase?: string } };
+    const sceneAny = this.scene as {
+        eventManager?: {
+            eventPhase?: string;
+            getBridgeWindProgress?: () => number;
+            bridgeGustActive?: boolean;
+        };
+    };
     const inBridgeWind = sceneAny.eventManager?.eventPhase === 'BRIDGE_WIND';
     if (this.isStruggling && onGround && !isTweening) {
         const wobble = Math.sin(time * 0.015);
@@ -572,10 +578,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         const stepPush = Math.sin(time * 0.02) * 2;
         this.x = startX + stepPush;
     } else if (inBridgeWind && !isTweening) {
-        // Bridge wind: constant lateral wind + A/D counter on ground or air. Clamp drift.
+        // Bridge wind: lateral wind force escalates from base to base*(1+ESCALATION) across segment.
+        const progress = sceneAny.eventManager?.getBridgeWindProgress?.() ?? 0;
+        const escalation = 1 + BRIDGE_WIND.ESCALATION_FACTOR * progress;
+        const gustMult = sceneAny.eventManager?.bridgeGustActive ? BRIDGE_WIND.GUST_FORCE_MULTIPLIER : 1;
+        let vx = BRIDGE_WIND.WIND_FORCE_X * escalation * gustMult;
         const leftHeld = this.cursors?.left.isDown || this.leftKeyA?.isDown || this.isHoldingLeft;
         const rightHeld = this.cursors?.right.isDown || this.rightKeyD?.isDown || this.isHoldingRight;
-        let vx = BRIDGE_WIND.WIND_FORCE_X;
         if (rightHeld && !leftHeld) vx += BRIDGE_WIND.PLAYER_COUNTER_FORCE;
         else if (leftHeld && !rightHeld) vx -= BRIDGE_WIND.PLAYER_COUNTER_FORCE * 0.5;
         body.setVelocityX(vx);
@@ -588,6 +597,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             this.x = startX + BRIDGE_WIND.X_DRIFT_MAX;
             if (body.velocity.x > 0) body.setVelocityX(0);
         }
+
+        // Player tilt — visual feedback. Lean in the direction of net velocity.
+        const targetRot = Phaser.Math.Clamp(vx / BRIDGE_WIND.TILT_FACTOR, -BRIDGE_WIND.TILT_MAX, BRIDGE_WIND.TILT_MAX);
+        this.setRotation(Phaser.Math.Linear(this.rotation, targetRot, 0.18));
     } else if (!onGround && !isTweening) {
         // Limited mid-air steering — auto-runner identity preserved by capping the offset
         const leftHeld = this.cursors?.left.isDown || this.leftKeyA?.isDown || this.isHoldingLeft;
