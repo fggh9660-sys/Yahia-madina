@@ -5,7 +5,7 @@ import { Platform } from '../objects/Platform';
 import { Foreground } from '../objects/Foreground';
 import { RoadsideArchitecture } from '../objects/RoadsideArchitecture';
 import { MainScene } from '../scenes/MainScene';
-import { PROGRESS, BRIDGE_WIND } from '../../constants';
+import { PROGRESS, BRIDGE_WIND, BRIDGE_COLLAPSE } from '../../constants';
 
 export type WorldZone = 'DESERT' | 'TRANSITION' | 'CITY' | 'LIBRARY';
 /** Visual sub‑zones inside the city – used for Step 5 environment progression. */
@@ -69,10 +69,11 @@ export class EnvironmentManager {
               this.citySegment = 'CITY_BAYT';
           }
 
-          // 2) Bridge wind set-piece — kicks in slightly before library trigger, so the bridge
-          //    becomes the runway leading to Bayt Al-Hikma. Phase auto-exits after segment length.
-          if (!this.hasTriggeredBridgeWind && distInCity >= BRIDGE_WIND.TRIGGER_DISTANCE_IN_CITY_M) {
-              if (this.scene.eventManager.triggerBridgeWind()) {
+          // 2) Bridge set-piece — collapsing-bridge variant per Yahia 2026-05-22 pivot. Wind
+          //    variant code retained in EventManager but no longer triggered. Phase auto-exits
+          //    after segment length. Restart from city entrance on fall.
+          if (!this.hasTriggeredBridgeWind && distInCity >= BRIDGE_COLLAPSE.TRIGGER_DISTANCE_IN_CITY_M) {
+              if (this.scene.eventManager.triggerBridgeCollapse()) {
                   this.hasTriggeredBridgeWind = true;
               }
           }

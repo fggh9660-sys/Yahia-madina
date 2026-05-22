@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, BRIDGE_WIND, BALANCE_METER, SPEED_BOOST, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, BRIDGE_WIND, BRIDGE_COLLAPSE, BALANCE_METER, SPEED_BOOST, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
 import { NOOR_BOND_REWARDS, getBondTier, getBondTierDef, getNextTierThreshold, getCurrentTierFloor } from '../../data/noorBond';
 import { Player } from '../objects/Player';
 import { Obstacle } from '../objects/Obstacle';
@@ -942,7 +942,7 @@ export class MainScene extends Phaser.Scene {
       this.audioManager?.playStarPitched(COMBO.TIER_DETUNE[this.comboTier - 1]);
   }
 
-  private hitStop(durationMs: number, scale: number) {
+  public hitStop(durationMs: number, scale: number) {
       const prevSpeed = this.getGameSpeed();
       const target = prevSpeed * scale;
       this.setGameSpeed(target);
@@ -1208,6 +1208,14 @@ export class MainScene extends Phaser.Scene {
   }
 
   private updateBridgeBanners(frameMove: number, delta: number) {
+      // Bridge collapse fall detection — if player is grounded over a collapsed tile, fail.
+      if (this.eventManager?.eventPhase === 'BRIDGE_COLLAPSE' && !this.eventManager.bridgeFell) {
+          const body = this.player?.body as Phaser.Physics.Arcade.Body | undefined;
+          const onGround = body ? (body.blocked.down || body.touching.down) : false;
+          if (onGround && this.eventManager.isOverCollapsedGap?.(this.player.x)) {
+              this.triggerBridgeFall();
+          }
+      }
       const isBridge = this.eventManager?.eventPhase === 'BRIDGE_WIND';
       if (isBridge) {
           this.bridgeBannerTimer += delta;
@@ -1315,18 +1323,43 @@ export class MainScene extends Phaser.Scene {
   private triggerBridgeFall() {
       if (!this.eventManager || this.eventManager.bridgeFell) return;
       this.eventManager.bridgeFell = true;
-      this.cameras.main.shake(220, 0.014);
-      // Reset player to center + take damage
-      this.player.x = getPlayerStartX(this.scale.width);
-      this.player.setRotation(0);
-      this.damagePlayer();
+      this.cameras.main.shake(
+          BRIDGE_COLLAPSE.FALL_FAIL_SHAKE_MS,
+          BRIDGE_COLLAPSE.FALL_FAIL_SHAKE_INTENSITY,
+      );
       this.audioManager?.playDamage();
       this.showFloatingText(this.player.x, this.player.y - 60, "سقطت! 💢", '#ff4d4d');
-      this.edgeTimeMs = 0;
-      // Allow re-trigger after a grace period
-      this.time.delayedCall(1200, () => {
-          if (this.eventManager) this.eventManager.bridgeFell = false;
+      // Fade out then restart from city entrance
+      this.cameras.main.fadeOut(550, 0, 0, 0);
+      this.cameras.main.once('camerafadeoutcomplete', () => {
+          this.restartFromCityEntrance();
+          this.cameras.main.fadeIn(450);
       });
+  }
+
+  /**
+   * Bridge fail recovery: take damage + reset player to start of city stage, clean up
+   * bridge tiles so the next encounter starts fresh. Player run distance is rewound to
+   * the city start so they replay the full city stage approach. (Per Yahia 2026-05-22 spec.)
+   */
+  private restartFromCityEntrance() {
+      // Take damage (may game-over)
+      this.damagePlayer();
+      if (this.isGameOver) return;
+      this.player.x = getPlayerStartX(this.scale.width);
+      this.player.y = getPlayerSpawnY(this.scale.height);
+      this.player.setRotation(0);
+      this.player.setVelocity(0, 0);
+      this.eventManager.resetBridgeCollapse();
+      // Rewind run distance to city start so the player replays the city approach
+      const cityStart = this.environmentManager['cityStartDistance'] ?? this.runDistance;
+      this.runDistance = cityStart;
+      // Reset the bridge-trigger flag in EnvironmentManager so collapse fires again on re-approach
+      (this.environmentManager as unknown as { hasTriggeredBridgeWind: boolean }).hasTriggeredBridgeWind = false;
+      this.spawnManager?.removeAllSpawned();
+      this.edgeTimeMs = 0;
+      this.eventManager.bridgeFell = false;
+      this.showFloatingText(this.player.x, this.player.y - 80, "أعد المحاولة!", '#ffaa00');
   }
 
   private setSpeedLinesTier(tier: number) {

@@ -125,8 +125,9 @@ export class SpawnManager {
     const runDistance = this.scene.getRunDistance();
     const evt = this.scene.eventManager;
     const isSandstorm = evt.eventPhase === 'SANDSTORM_ONSET' || evt.eventPhase === 'SANDSTORM_WALK' || evt.eventPhase === 'SANDSTORM_APPROACH';
+    const isBridge = evt.eventPhase === 'BRIDGE_COLLAPSE' || evt.eventPhase === 'BRIDGE_WIND';
 
-    if (!isSandstorm) {
+    if (!isSandstorm && !isBridge) {
         const groundY = getGroundY(this.scene.scale.height);
         const minAboveGround = 60;
         const maxAboveGround = 280;
@@ -166,7 +167,7 @@ export class SpawnManager {
     const isDesertRun = evt.eventPhase === 'INTRO_RUN' && runDistance >= 0;
     const spawningAllowed = evt.isSpawningAllowed();
 
-    if (isDesertRun || spawningAllowed) {
+    if ((isDesertRun || spawningAllowed) && !isBridge) {
         this.spawnTimer += delta;
         if (this.spawnTimer > this.nextSpawnTime) {
             this.spawnTimer = 0;

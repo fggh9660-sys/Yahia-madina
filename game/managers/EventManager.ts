@@ -1,6 +1,7 @@
 
 import Phaser from 'phaser';
-import { PROGRESS, BRIDGE_WIND, PHYSICS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
+import { PROGRESS, BRIDGE_WIND, BRIDGE_COLLAPSE, PHYSICS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
+import { BridgeTile } from '../objects/BridgeTile';
 import { MainScene } from '../scenes/MainScene';
 import { MagicGate } from '../objects/MagicGate';
 import { MagicChest } from '../objects/MagicChest';
@@ -19,6 +20,7 @@ export type EventPhase =
     'RECOVERY' |
     'SANDSTORM_ONSET' | 'SANDSTORM_WALK' | 'SANDSTORM_APPROACH' | 'SANDSTORM_SHELTER' |
     'BRIDGE_WIND' |
+    'BRIDGE_COLLAPSE' |
     'LIBRARY_APPROACH' | 'LIBRARY_ENTRY' |
     'CARPET_RIDE' |
     'HANGING';
@@ -89,12 +91,21 @@ export class EventManager {
   // Tutorial Flags for Flow
   private hasTriggeredRooftopTutorial: boolean = false;
 
-  // Bridge wind set-piece (Day 2 + Day 4 refinement)
+  // Bridge wind set-piece (Day 2 + Day 4 refinement) — disabled in favor of BRIDGE_COLLAPSE
+  // per Yahia 2026-05-22 pivot. Code retained in case wind variant is revived.
   public bridgeWindTriggered: boolean = false;
   private bridgeWindStartDistance: number = 0;
   public bridgeFell: boolean = false;
   private bridgeGustTimers: Phaser.Time.TimerEvent[] = [];
   public bridgeGustActive: boolean = false;
+
+  // Collapsing bridge (Wk1 Day 5 — Yahia 2026-05-22 pivot)
+  public bridgeCollapseTriggered: boolean = false;
+  private bridgeCollapseStartDistance: number = 0;
+  private bridgeCollapseStartTime: number = 0;
+  public bridgeTiles: BridgeTile[] = [];
+  private bridgeTileSpawnX: number = 0;
+  private bridgeCollapseSchedTimer: Phaser.Time.TimerEvent | null = null;
 
   // Puzzle sequences (storm: 3–5 puzzles; library: 3–5 puzzles)
   private stormPuzzleQueue: ActivePuzzle[] = [];
@@ -112,6 +123,8 @@ export class EventManager {
 
   public update(frameMove: number, delta: number) {
       this.checkBridgeWindExit();
+      this.checkBridgeCollapseExit();
+      this.updateBridgeTiles(frameMove);
       if (this.currentGate) {
           if (this.currentGate.active) this.currentGate.update(frameMove);
           else this.currentGate = null;
@@ -762,6 +775,152 @@ export class EventManager {
       if (this.eventPhase !== 'BRIDGE_WIND') return 0;
       const distInBridge = this.scene.getRunDistance() - this.bridgeWindStartDistance;
       return Math.max(0, Math.min(1, distInBridge / BRIDGE_WIND.SEGMENT_LENGTH_M));
+  }
+
+  /**
+   * Wk1 Day 5: collapsing bridge entry. Replaces wind mechanic per Yahia 2026-05-22.
+   * Player runs onto the bridge normally; after PRELUDE_MS, tiles begin collapsing in front
+   * of the player and they must jump across gaps. Falling = full game-over and restart at
+   * city entrance.
+   */
+  public triggerBridgeCollapse(): boolean {
+      if (this.bridgeCollapseTriggered) return false;
+      if (this.eventPhase !== 'NONE') return false;
+      this.bridgeCollapseTriggered = true;
+      this.bridgeFell = false;
+      this.eventPhase = 'BRIDGE_COLLAPSE';
+      this.bridgeCollapseStartDistance = this.scene.getRunDistance();
+      this.bridgeCollapseStartTime = this.scene.time.now;
+      // Clear pre-existing obstacles / collectibles that are still on screen so the bridge entry
+      // is a clean stage, not a chaotic overlap of leftover city spawns + tiles.
+      this.scene.spawnManager?.removeAllSpawned();
+      this.scene.showNoorMessage("الجسر ينهار! اقفز فوق الفجوات! 🌉", false, 'warning');
+      this.scene.setBridgeWindActive?.(true);
+      this.scene.cameras.main.shake(
+          BRIDGE_COLLAPSE.ENTRY_SHAKE_MS,
+          new Phaser.Math.Vector2(0, BRIDGE_COLLAPSE.ENTRY_SHAKE_INTENSITY),
+      );
+      this.scene.hitStop?.(BRIDGE_COLLAPSE.ENTRY_HITSTOP_MS, BRIDGE_COLLAPSE.ENTRY_HITSTOP_SCALE);
+      this.scene.audioManager?.playStarPitched(-400);
+
+      const groundY = getGroundY(this.scene.scale.height);
+      const tileTopY = groundY - BRIDGE_COLLAPSE.TILE_HEIGHT / 2 - 2;
+      const playerX = this.scene.player?.x ?? getPlayerStartX(this.scene.scale.width);
+      // Pre-fill tiles from a bit before the player to past the right edge — bridge surface
+      // is visible immediately when the phase begins.
+      const startTileX = playerX - BRIDGE_COLLAPSE.TILE_WIDTH * 2;
+      const endTileX = this.scene.scale.width + 400;
+      const tileCount = Math.ceil((endTileX - startTileX) / BRIDGE_COLLAPSE.TILE_WIDTH);
+      for (let i = 0; i < tileCount; i++) {
+          const t = new BridgeTile(this.scene, startTileX + i * BRIDGE_COLLAPSE.TILE_WIDTH, tileTopY);
+          this.bridgeTiles.push(t);
+      }
+      this.bridgeTileSpawnX = startTileX + tileCount * BRIDGE_COLLAPSE.TILE_WIDTH;
+      this.scheduleNextCollapse();
+      return true;
+  }
+
+  /** Picks the right collapse interval based on phase progress and schedules the next tile crack. */
+  private scheduleNextCollapse() {
+      if (this.eventPhase !== 'BRIDGE_COLLAPSE') return;
+      const elapsedMs = this.scene.time.now - this.bridgeCollapseStartTime;
+      if (elapsedMs < BRIDGE_COLLAPSE.PRELUDE_MS) {
+          this.bridgeCollapseSchedTimer = this.scene.time.delayedCall(BRIDGE_COLLAPSE.PRELUDE_MS - elapsedMs, () => this.scheduleNextCollapse());
+          return;
+      }
+      const progress = this.getBridgeCollapseProgress();
+      let interval: number;
+      if (progress < BRIDGE_COLLAPSE.EARLY_PHASE_END_RATIO) interval = BRIDGE_COLLAPSE.EARLY_COLLAPSE_INTERVAL_MS;
+      else if (progress < BRIDGE_COLLAPSE.MID_PHASE_END_RATIO) interval = BRIDGE_COLLAPSE.MID_COLLAPSE_INTERVAL_MS;
+      else interval = BRIDGE_COLLAPSE.LATE_COLLAPSE_INTERVAL_MS;
+
+      // Pick a tile in the right-half of the screen that's still normal to crack
+      const W = this.scene.scale.width;
+      const candidates = this.bridgeTiles.filter(t => t.active && t.tileState === 'normal' && t.x > W * 0.45 && t.x < W + 100);
+      if (candidates.length > 0) {
+          const pick = candidates[Phaser.Math.Between(0, candidates.length - 1)];
+          pick.startCrack();
+      }
+      this.bridgeCollapseSchedTimer = this.scene.time.delayedCall(interval, () => this.scheduleNextCollapse());
+  }
+
+  /** 0..1 progress through collapse phase. */
+  public getBridgeCollapseProgress(): number {
+      if (this.eventPhase !== 'BRIDGE_COLLAPSE') return 0;
+      const dist = this.scene.getRunDistance() - this.bridgeCollapseStartDistance;
+      return Math.max(0, Math.min(1, dist / BRIDGE_COLLAPSE.PHASE_LENGTH_M));
+  }
+
+  /** Returns true if the player at this x position is over a collapsed tile (i.e., a gap). */
+  public isOverCollapsedGap(playerX: number): boolean {
+      const half = BRIDGE_COLLAPSE.TILE_WIDTH / 2;
+      for (const tile of this.bridgeTiles) {
+          if (tile.active && tile.tileState === 'collapsed' && Math.abs(playerX - tile.x) < half) {
+              return true;
+          }
+      }
+      return false;
+  }
+
+  /** Update tile positions (called from MainScene every frame with frameMove). */
+  public updateBridgeTiles(frameMove: number) {
+      // Scroll each tile + cull off-screen
+      for (let i = this.bridgeTiles.length - 1; i >= 0; i--) {
+          const t = this.bridgeTiles[i];
+          if (!t.active) {
+              this.bridgeTiles.splice(i, 1);
+              continue;
+          }
+          t.scrollWith(frameMove);
+      }
+      // Continuous tile generation — keep tiles spawning from right edge until phase ends
+      if (this.eventPhase === 'BRIDGE_COLLAPSE') {
+          this.bridgeTileSpawnX -= frameMove;
+          if (this.bridgeTileSpawnX < this.scene.scale.width + 200) {
+              const groundY = getGroundY(this.scene.scale.height);
+              const tileTopY = groundY - BRIDGE_COLLAPSE.TILE_HEIGHT / 2 - 2;
+              const t = new BridgeTile(this.scene, this.scene.scale.width + 220, tileTopY);
+              this.bridgeTiles.push(t);
+              this.bridgeTileSpawnX = this.scene.scale.width + 220 + BRIDGE_COLLAPSE.TILE_WIDTH;
+          }
+      }
+  }
+
+  /** Called every frame; exits BRIDGE_COLLAPSE phase when segment is fully traversed. */
+  private checkBridgeCollapseExit() {
+      if (this.eventPhase !== 'BRIDGE_COLLAPSE') return;
+      const dist = this.scene.getRunDistance() - this.bridgeCollapseStartDistance;
+      if (dist >= BRIDGE_COLLAPSE.PHASE_LENGTH_M) {
+          this.eventPhase = 'NONE';
+          this.scene.setBridgeWindActive?.(false);
+          if (this.bridgeCollapseSchedTimer) this.bridgeCollapseSchedTimer.remove(false);
+          this.bridgeCollapseSchedTimer = null;
+          if (!this.bridgeFell) {
+              this.scene.addScore(BRIDGE_COLLAPSE.SURVIVAL_BONUS_SCORE);
+              const player = this.scene.player;
+              if (player) {
+                  this.scene.showFloatingText(player.x, player.y - 80, `+${BRIDGE_COLLAPSE.SURVIVAL_BONUS_SCORE} نجوت!`, '#ffd700');
+              }
+              this.scene.audioManager?.playStarPitched(800);
+          }
+      }
+  }
+
+  /** Reset all collapsing-bridge state (called on scene restart or fall-to-city-entrance reset). */
+  public resetBridgeCollapse() {
+      if (this.bridgeCollapseSchedTimer) this.bridgeCollapseSchedTimer.remove(false);
+      this.bridgeCollapseSchedTimer = null;
+      for (const t of this.bridgeTiles) {
+          if (t.active) t.destroy();
+      }
+      this.bridgeTiles = [];
+      this.bridgeCollapseTriggered = false;
+      this.bridgeCollapseStartDistance = 0;
+      this.bridgeCollapseStartTime = 0;
+      if (this.eventPhase === 'BRIDGE_COLLAPSE') {
+          this.eventPhase = 'NONE';
+          this.scene.setBridgeWindActive?.(false);
+      }
   }
 
   /** Called every frame while bridge phase is active; exits the phase when segment length is covered. */
