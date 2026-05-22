@@ -1,6 +1,6 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, BRIDGE_WIND, BRIDGE_COLLAPSE, BALANCE_METER, SPEED_BOOST, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, BRIDGE_WIND, BRIDGE_COLLAPSE, PATH_FORK, BALANCE_METER, SPEED_BOOST, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
 import { NOOR_BOND_REWARDS, getBondTier, getBondTierDef, getNextTierThreshold, getCurrentTierFloor } from '../../data/noorBond';
 import { Player } from '../objects/Player';
 import { Obstacle } from '../objects/Obstacle';
@@ -87,6 +87,8 @@ export class MainScene extends Phaser.Scene {
   private balanceMeterFill: Phaser.GameObjects.Graphics | null = null;
   private balanceMeterIndicator: Phaser.GameObjects.Graphics | null = null;
   private edgeTimeMs: number = 0;
+  private pathHudBg: Phaser.GameObjects.Graphics | null = null;
+  private pathHudLabel: Phaser.GameObjects.Text | null = null;
 
   // UI State
   private activeMessage: string | null = null; 
@@ -418,6 +420,8 @@ export class MainScene extends Phaser.Scene {
     this.balanceMeterFill = null;
     this.balanceMeterIndicator = null;
     this.edgeTimeMs = 0;
+    this.pathHudBg = null;
+    this.pathHudLabel = null;
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
@@ -772,6 +776,53 @@ export class MainScene extends Phaser.Scene {
    * Speed boost pickup effect (Wk 1 Day 3): ramps speedModifier up to SPEED_BOOST.MULTIPLIER
    * over RAMP_UP_MS, stays for DURATION_MS, then ramps back down to 1.0.
    */
+  /**
+   * Path fork resolution callback fired by EventManager. Updates the small HUD label
+   * showing current track + plays a confirm audio cue when a side is committed.
+   */
+  public onPathChosen(side: 'A' | 'B' | 'NONE') {
+      if (side === 'NONE') {
+          if (this.pathHudBg) this.pathHudBg.setVisible(false);
+          if (this.pathHudLabel) this.pathHudLabel.setVisible(false);
+          return;
+      }
+      this.audioManager?.playStarPitched(side === 'A' ? 400 : 200);
+      this.cameras.main.shake(80, 0.003);
+      this.showFloatingText(this.player.x, this.player.y - 90, side === 'A' ? 'يسار 🠈' : 'يمين 🠊', side === 'A' ? '#4dd0ff' : '#ffaa00');
+
+      const W = this.scale.width;
+      const cx = W / 2;
+      const cy = PATH_FORK.HUD_Y_FROM_TOP;
+
+      if (!this.pathHudBg) {
+          this.pathHudBg = this.add.graphics().setDepth(498).setScrollFactor(0);
+      }
+      if (!this.pathHudLabel) {
+          this.pathHudLabel = this.add.text(cx, cy, '', {
+              fontFamily: 'Cairo', fontSize: '14px', fontStyle: 'bold',
+              color: '#ffffff', stroke: '#000', strokeThickness: 2,
+          }).setOrigin(0.5, 0.5).setDepth(499).setScrollFactor(0);
+      }
+      const color = side === 'A' ? PATH_FORK.ARROW_COLOR_LEFT : PATH_FORK.ARROW_COLOR_RIGHT;
+      this.pathHudBg.clear();
+      this.pathHudBg.fillStyle(PATH_FORK.HUD_BG_COLOR, PATH_FORK.HUD_BG_ALPHA);
+      this.pathHudBg.fillRoundedRect(cx - PATH_FORK.HUD_W / 2, cy - PATH_FORK.HUD_H / 2, PATH_FORK.HUD_W, PATH_FORK.HUD_H, 8);
+      this.pathHudBg.lineStyle(2, color, 0.9);
+      this.pathHudBg.strokeRoundedRect(cx - PATH_FORK.HUD_W / 2, cy - PATH_FORK.HUD_H / 2, PATH_FORK.HUD_W, PATH_FORK.HUD_H, 8);
+      this.pathHudBg.setVisible(true);
+      this.pathHudLabel.setText(side === 'A' ? 'مسار يسار' : 'مسار يمين');
+      this.pathHudLabel.setColor(`#${color.toString(16).padStart(6, '0')}`);
+      this.pathHudLabel.setVisible(true);
+
+      // Auto-hide after track duration
+      this.time.delayedCall(PATH_FORK.ACTIVE_DURATION_MS + 200, () => {
+          if (this.eventManager?.activeTrack === 'NONE') {
+              this.pathHudBg?.setVisible(false);
+              this.pathHudLabel?.setVisible(false);
+          }
+      });
+  }
+
   public triggerSpeedBoost() {
       if (this.isGameOver || this.isPausedMenu) return;
       this.audioManager?.playStarPitched(600);

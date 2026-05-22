@@ -1,7 +1,8 @@
 
 import Phaser from 'phaser';
-import { PROGRESS, BRIDGE_WIND, BRIDGE_COLLAPSE, PHYSICS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
+import { PROGRESS, BRIDGE_WIND, BRIDGE_COLLAPSE, PATH_FORK, PHYSICS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
 import { BridgeTile } from '../objects/BridgeTile';
+import { PathFork } from '../objects/PathFork';
 import { MainScene } from '../scenes/MainScene';
 import { MagicGate } from '../objects/MagicGate';
 import { MagicChest } from '../objects/MagicChest';
@@ -107,6 +108,12 @@ export class EventManager {
   private bridgeTileSpawnX: number = 0;
   private bridgeCollapseSchedTimer: Phaser.Time.TimerEvent | null = null;
 
+  // Branching paths (Wk 1 Day 5 — task #21)
+  public pathForks: PathFork[] = [];
+  public activeTrack: 'NONE' | 'A' | 'B' = 'NONE';
+  private trackActiveUntilMs: number = 0;
+  private lastPathForkSpawnAt: number = 0;
+
   // Puzzle sequences (storm: 3–5 puzzles; library: 3–5 puzzles)
   private stormPuzzleQueue: ActivePuzzle[] = [];
   private stormPuzzleIndex: number = 0;
@@ -125,6 +132,8 @@ export class EventManager {
       this.checkBridgeWindExit();
       this.checkBridgeCollapseExit();
       this.updateBridgeTiles(frameMove);
+      this.maybeSpawnPathFork();
+      this.updatePathForks(frameMove);
       if (this.currentGate) {
           if (this.currentGate.active) this.currentGate.update(frameMove);
           else this.currentGate = null;
@@ -906,6 +915,73 @@ export class EventManager {
       }
   }
 
+  /**
+   * Branching paths (Wk 1 Day 5): spawn a fork marker every PATH_FORK.TRIGGER_INTERVAL_M
+   * in the city stage. The marker scrolls toward the player; when it reaches the input
+   * window, the player's currently-held A/D decides which track they commit to.
+   */
+  public maybeSpawnPathFork() {
+      if (this.eventPhase !== 'NONE') return;
+      const env = this.scene.environmentManager;
+      if (env.getZone() !== 'CITY') return;
+      const dist = this.scene.getRunDistance();
+      if (dist - this.lastPathForkSpawnAt < PATH_FORK.TRIGGER_INTERVAL_M) return;
+      // Don't spawn near the bridge trigger so the two set-pieces don't collide
+      const env2 = env as unknown as { cityStartDistance?: number };
+      const distInCity = dist - (env2.cityStartDistance ?? 0);
+      if (distInCity >= BRIDGE_COLLAPSE.TRIGGER_DISTANCE_IN_CITY_M - 40) return;
+      this.lastPathForkSpawnAt = dist;
+      const groundY = getGroundY(this.scene.scale.height);
+      const fork = new PathFork(this.scene, this.scene.scale.width + 80, groundY);
+      this.pathForks.push(fork);
+  }
+
+  /** Called each frame from MainScene — scrolls forks + resolves input window crossings. */
+  public updatePathForks(frameMove: number) {
+      const playerX = this.scene.player?.x ?? 0;
+      const leftHeld = !!(this.scene.player as unknown as { isHoldingLeft?: boolean })?.isHoldingLeft
+          || !!this.scene.input.keyboard?.checkDown(this.scene.input.keyboard.addKey('A'), 0)
+          || !!this.scene.input.keyboard?.checkDown(this.scene.input.keyboard.addKey('LEFT'), 0);
+      const rightHeld = !!(this.scene.player as unknown as { isHoldingRight?: boolean })?.isHoldingRight
+          || !!this.scene.input.keyboard?.checkDown(this.scene.input.keyboard.addKey('D'), 0)
+          || !!this.scene.input.keyboard?.checkDown(this.scene.input.keyboard.addKey('RIGHT'), 0);
+
+      for (let i = this.pathForks.length - 1; i >= 0; i--) {
+          const fork = this.pathForks[i];
+          if (!fork.active) {
+              this.pathForks.splice(i, 1);
+              continue;
+          }
+          fork.update(frameMove);
+          if (fork.canResolveAt(playerX)) {
+              const side = leftHeld && !rightHeld ? 'A' : rightHeld && !leftHeld ? 'B' : 'NONE';
+              fork.resolve(side);
+              if (side !== 'NONE') {
+                  this.activeTrack = side;
+                  this.trackActiveUntilMs = this.scene.time.now + PATH_FORK.ACTIVE_DURATION_MS;
+                  this.scene.onPathChosen?.(side);
+              }
+          }
+      }
+      // Expire active track
+      if (this.activeTrack !== 'NONE' && this.scene.time.now >= this.trackActiveUntilMs) {
+          const prev = this.activeTrack;
+          this.activeTrack = 'NONE';
+          this.scene.onPathChosen?.('NONE');
+          // Floating message handled by MainScene if it wants
+          void prev;
+      }
+  }
+
+  /** Reset path fork state — called on scene restart. */
+  public resetPathForks() {
+      for (const f of this.pathForks) if (f.active) f.destroy();
+      this.pathForks = [];
+      this.activeTrack = 'NONE';
+      this.trackActiveUntilMs = 0;
+      this.lastPathForkSpawnAt = 0;
+  }
+
   /** Reset all collapsing-bridge state (called on scene restart or fall-to-city-entrance reset). */
   public resetBridgeCollapse() {
       if (this.bridgeCollapseSchedTimer) this.bridgeCollapseSchedTimer.remove(false);
@@ -1244,6 +1320,8 @@ export class EventManager {
       this.hasTriggeredRooftopTutorial = false;
       this.bridgeWindTriggered = false;
       this.bridgeWindStartDistance = 0;
+      this.resetBridgeCollapse();
+      this.resetPathForks();
 
       // Reset Carpet Logic
       this.carpetMissed = false;
