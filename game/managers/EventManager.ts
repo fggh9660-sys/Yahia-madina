@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { PROGRESS, BRIDGE_WIND, BRIDGE_COLLAPSE, PATH_FORK, PHYSICS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
 import { BridgeTile } from '../objects/BridgeTile';
 import { PathFork } from '../objects/PathFork';
+import { Star } from '../objects/Star';
 import { MainScene } from '../scenes/MainScene';
 import { MagicGate } from '../objects/MagicGate';
 import { MagicChest } from '../objects/MagicChest';
@@ -911,7 +912,24 @@ export class EventManager {
                   this.scene.showFloatingText(player.x, player.y - 80, `+${BRIDGE_COLLAPSE.SURVIVAL_BONUS_SCORE} نجوت!`, '#ffd700');
               }
               this.scene.audioManager?.playStarPitched(800);
+              // Step 10: spawn star cluster as bridge exit reward + Noor dialogue moment
+              this.spawnBridgeExitReward();
+              this.scene.showNoorMessage("أحسنت! عبرت الجسر بأمان! 🎉", false, 'success');
           }
+      }
+  }
+
+  /** Spawn a star reward cluster just after the bridge exit (Step 10). */
+  private spawnBridgeExitReward() {
+      const groundY = getGroundY(this.scene.scale.height);
+      const baseX = this.scene.scale.width + 80;
+      const starGap = 56;
+      for (let i = 0; i < BRIDGE_COLLAPSE.REWARD_STAR_COUNT; i++) {
+          const t = i / Math.max(1, BRIDGE_COLLAPSE.REWARD_STAR_COUNT - 1);
+          const x = baseX + i * starGap;
+          // Gentle arc — peak at center
+          const y = groundY - 80 - 40 * Math.sin(t * Math.PI);
+          this.scene.spawnManager?.stars.add(new Star(this.scene, x, y));
       }
   }
 

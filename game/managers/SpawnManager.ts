@@ -32,9 +32,11 @@ export class SpawnManager {
   private lastFallingDebrisAt: number = 0;
   private lastSpeedBoostAt: number = 0;
   private lastJumpArcTrailAt: number = 0;
+  private lastTrackBonusAt: number = 0;
   private readonly FALLING_DEBRIS_INTERVAL_M = 70;
   private readonly SPEED_BOOST_INTERVAL_M = 130;
   private readonly JUMP_ARC_TRAIL_INTERVAL_M = 100;
+  private readonly TRACK_BONUS_INTERVAL_M = 25;
 
   private spawnTimer: number = 0;
   public nextSpawnTime: number = 100;
@@ -159,6 +161,25 @@ export class SpawnManager {
             if (this.isCurrentlyClear()) {
                 this.lastJumpArcTrailAt = runDistance;
                 this.spawnJumpArcTrail(this.scene.scale.width + 100, groundY);
+            }
+        }
+        // Track differentiation (branching paths v1.5): bias spawn pattern per active track.
+        //   Track A = "challenge" → bonus obstacle clusters more often
+        //   Track B = "collector" → bonus star trail more often
+        const track = evt.activeTrack;
+        if (track !== 'NONE' && runDistance - this.lastTrackBonusAt >= this.TRACK_BONUS_INTERVAL_M) {
+            this.lastTrackBonusAt = runDistance;
+            if (track === 'B') {
+                // Reward cluster — 3 stars at jump-arc height
+                for (let i = 0; i < 3; i++) {
+                    const sx = this.scene.scale.width + 100 + i * 48;
+                    const sy = groundY - 90 - 30 * Math.sin((i / 2) * Math.PI);
+                    this.stars.add(new Star(this.scene, sx, sy));
+                }
+            } else if (track === 'A') {
+                // Bonus obstacle — extra rock at ground level
+                const obstacleType = inCity ? 'rock_city' : 'rock';
+                this.obstacles.add(new Obstacle(this.scene, this.scene.scale.width + 120, groundY, obstacleType as ObstacleType));
             }
         }
     }
@@ -781,6 +802,7 @@ export class SpawnManager {
       this.lastHeartSpawnAt = 0;
       this.lastShieldSpawnAt = 0;
       this.lastFallingDebrisAt = 0;
+      this.lastTrackBonusAt = 0;
       this.lastSpeedBoostAt = 0;
       this.spawnCount = 0;
       this.spawnQueue = [];
