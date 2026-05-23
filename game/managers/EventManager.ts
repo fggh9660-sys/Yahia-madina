@@ -1027,6 +1027,23 @@ export class EventManager {
               this.spawnBridgeExitReward();
               this.scene.showNoorMessage("أحسنت! عبرت الجسر بأمان! 🎉", false, 'success');
           }
+          // Cleanup remaining bridge tiles + checkpoints so they don't visually overlap with
+          // the library trigger which fires shortly after bridge exit (~10m later in city).
+          this.scene.time.delayedCall(300, () => {
+              for (const t of this.bridgeTiles) {
+                  if (t.active && t.tileState === 'normal') t.collapse();
+              }
+              this.scene.time.delayedCall(BRIDGE_COLLAPSE.COLLAPSE_DURATION_MS, () => {
+                  for (const t of this.bridgeTiles) {
+                      if (t.active) t.destroy();
+                  }
+                  this.bridgeTiles = [];
+                  for (const c of this.bridgeCheckpoints) {
+                      if (c.active) c.destroy();
+                  }
+                  this.bridgeCheckpoints = [];
+              });
+          });
       }
   }
 

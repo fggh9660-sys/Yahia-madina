@@ -49,7 +49,7 @@ export class BridgeTile extends Phaser.GameObjects.Sprite {
             targets: this,
             alpha: { from: 1, to: 0.55 },
             duration: 120,
-            yoyo: true,
+            yoyo: true, 
             repeat: -1,
             ease: 'Sine.easeInOut',
         });

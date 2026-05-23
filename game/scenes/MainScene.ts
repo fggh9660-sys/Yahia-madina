@@ -1194,21 +1194,26 @@ export class MainScene extends Phaser.Scene {
           this.bridgeOverlay.fillRect(x, bridgeTop - railH, 4, railH + 2);
       }
 
-      // 3) Bridge top surface — stone band
-      this.bridgeOverlay.fillStyle(BRIDGE_WIND.OVERLAY_COLOR, BRIDGE_WIND.OVERLAY_ALPHA);
-      this.bridgeOverlay.fillRect(0, bridgeTop, W, bridgeH);
-      // Darker top + bottom edges for definition
-      this.bridgeOverlay.fillStyle(0x2a2018, 0.85);
-      this.bridgeOverlay.fillRect(0, bridgeTop, W, 3);
-      this.bridgeOverlay.fillRect(0, bridgeTop + bridgeH - 3, W, 3);
-      // Repeating stone-tile dividers
-      this.bridgeOverlay.fillStyle(0x2a2018, 0.55);
-      for (let x = 0; x < W; x += 56) {
-          this.bridgeOverlay.fillRect(x, bridgeTop + 4, 2, bridgeH - 8);
+      // 3) Bridge top surface — stone band. Drawn only for WIND variant; the COLLAPSE variant
+      //    uses discrete BridgeTile sprites as its surface so this continuous strip would
+      //    hide the gaps (the visual whole point of the collapse mechanic). Skip in collapse.
+      const isCollapse = this.eventManager?.eventPhase === 'BRIDGE_COLLAPSE';
+      if (!isCollapse) {
+          this.bridgeOverlay.fillStyle(BRIDGE_WIND.OVERLAY_COLOR, BRIDGE_WIND.OVERLAY_ALPHA);
+          this.bridgeOverlay.fillRect(0, bridgeTop, W, bridgeH);
+          // Darker top + bottom edges for definition
+          this.bridgeOverlay.fillStyle(0x2a2018, 0.85);
+          this.bridgeOverlay.fillRect(0, bridgeTop, W, 3);
+          this.bridgeOverlay.fillRect(0, bridgeTop + bridgeH - 3, W, 3);
+          // Repeating stone-tile dividers
+          this.bridgeOverlay.fillStyle(0x2a2018, 0.55);
+          for (let x = 0; x < W; x += 56) {
+              this.bridgeOverlay.fillRect(x, bridgeTop + 4, 2, bridgeH - 8);
+          }
+          // Highlight band on top edge
+          this.bridgeOverlay.fillStyle(0x8a7a6a, 0.6);
+          this.bridgeOverlay.fillRect(0, bridgeTop + 4, W, 2);
       }
-      // Highlight band on top edge
-      this.bridgeOverlay.fillStyle(0x8a7a6a, 0.6);
-      this.bridgeOverlay.fillRect(0, bridgeTop + 4, W, 2);
   }
 
   private spawnBridgeEntryPillar() {
