@@ -9,6 +9,7 @@ import { getQuestions } from '../data/questions';
 
 // Objects for Texture Generation
 import { Star } from '../objects/Star';
+import { KnowledgeFragment } from '../objects/KnowledgeFragment';
 import { Heart } from '../objects/Heart';
 import { ShieldItem } from '../objects/ShieldItem';
 import { RewardBox } from '../objects/RewardBox';
@@ -89,6 +90,9 @@ export class MainScene extends Phaser.Scene {
   private edgeTimeMs: number = 0;
   private pathHudBg: Phaser.GameObjects.Graphics | null = null;
   private pathHudLabel: Phaser.GameObjects.Text | null = null;
+  private splitPathCountdownGfx: Phaser.GameObjects.Graphics | null = null;
+  private splitPathCountdownLabel: Phaser.GameObjects.Text | null = null;
+  private splitPathCountdownEndMs: number = 0;
   private bridgeAmbientDebrisEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
   // UI State
@@ -424,6 +428,9 @@ export class MainScene extends Phaser.Scene {
     this.pathHudBg = null;
     this.pathHudLabel = null;
     this.bridgeAmbientDebrisEmitter = null;
+    this.splitPathCountdownGfx = null;
+    this.splitPathCountdownLabel = null;
+    this.splitPathCountdownEndMs = 0;
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
@@ -822,6 +829,8 @@ export class MainScene extends Phaser.Scene {
   }
 
   public onPathChosen(side: 'A' | 'B' | 'NONE') {
+      // Stop countdown timer regardless of choice
+      this.stopSplitPathCountdown();
       if (side === 'NONE') {
           if (this.pathHudBg) this.pathHudBg.setVisible(false);
           if (this.pathHudLabel) this.pathHudLabel.setVisible(false);
@@ -829,7 +838,19 @@ export class MainScene extends Phaser.Scene {
       }
       this.audioManager?.playStarPitched(side === 'A' ? 400 : 200);
       this.cameras.main.shake(80, 0.003);
-      this.showFloatingText(this.player.x, this.player.y - 90, side === 'A' ? 'يسار 🠈' : 'يمين 🠊', side === 'A' ? '#4dd0ff' : '#ffaa00');
+      const labelAr = side === 'A' ? PATH_FORK.KNOWLEDGE_LABEL_AR : PATH_FORK.SPEED_LABEL_AR;
+      this.showFloatingText(this.player.x, this.player.y - 90, side === 'A' ? `${labelAr} 📚` : `${labelAr} ⚡`, side === 'A' ? '#4dd0ff' : '#ffaa00');
+
+      // Trigger path-specific rewards
+      if (side === 'A') {
+          // Path of Knowledge — extra stars + 1 knowledge fragment + bonus score
+          this.addScore(PATH_FORK.KNOWLEDGE_BONUS_SCORE);
+          this.spawnKnowledgePathRewards();
+      } else {
+          // Path of Speed — auto speed boost + score
+          this.addScore(PATH_FORK.SPEED_BONUS_SCORE);
+          this.triggerSpeedBoost();
+      }
 
       const W = this.scale.width;
       const cx = W / 2;
@@ -851,7 +872,7 @@ export class MainScene extends Phaser.Scene {
       this.pathHudBg.lineStyle(2, color, 0.9);
       this.pathHudBg.strokeRoundedRect(cx - PATH_FORK.HUD_W / 2, cy - PATH_FORK.HUD_H / 2, PATH_FORK.HUD_W, PATH_FORK.HUD_H, 8);
       this.pathHudBg.setVisible(true);
-      this.pathHudLabel.setText(side === 'A' ? 'مسار يسار' : 'مسار يمين');
+      this.pathHudLabel.setText(side === 'A' ? `طريق ${PATH_FORK.KNOWLEDGE_LABEL_AR} 📚` : `طريق ${PATH_FORK.SPEED_LABEL_AR} ⚡`);
       this.pathHudLabel.setColor(`#${color.toString(16).padStart(6, '0')}`);
       this.pathHudLabel.setVisible(true);
 
@@ -862,6 +883,78 @@ export class MainScene extends Phaser.Scene {
               this.pathHudLabel?.setVisible(false);
           }
       });
+  }
+
+  private spawnKnowledgePathRewards() {
+      const W = this.scale.width;
+      const groundY = getPlayerSpawnY(this.scale.height) + 39;
+      const baseX = W + 100;
+      // Bonus star cluster in arc
+      for (let i = 0; i < PATH_FORK.KNOWLEDGE_EXTRA_STAR_COUNT; i++) {
+          const t = i / Math.max(1, PATH_FORK.KNOWLEDGE_EXTRA_STAR_COUNT - 1);
+          const x = baseX + i * 48;
+          const y = groundY - 70 - 35 * Math.sin(t * Math.PI);
+          this.spawnManager?.stars.add(new Star(this, x, y));
+      }
+      // One knowledge fragment at a jumpable height
+      const fragX = baseX + (PATH_FORK.KNOWLEDGE_EXTRA_STAR_COUNT + 1) * 48;
+      const fragY = groundY - 120;
+      this.spawnManager?.knowledgeFragments.add(new KnowledgeFragment(this, fragX, fragY));
+  }
+
+  /** Split Path 2-second countdown timer — circle UI counting down before the input window closes. */
+  public onSplitPathCountdownStart(durationMs: number) {
+      const W = this.scale.width;
+      const cx = W / 2;
+      const cy = PATH_FORK.COUNTDOWN_Y_FROM_TOP;
+      if (!this.splitPathCountdownGfx) {
+          this.splitPathCountdownGfx = this.add.graphics().setDepth(498).setScrollFactor(0);
+      }
+      if (!this.splitPathCountdownLabel) {
+          this.splitPathCountdownLabel = this.add.text(cx, cy, '', {
+              fontFamily: 'Cairo', fontSize: '24px', fontStyle: 'bold',
+              color: '#ffd700', stroke: '#000', strokeThickness: 3,
+          }).setOrigin(0.5, 0.5).setDepth(499).setScrollFactor(0);
+      }
+      this.splitPathCountdownGfx.setVisible(true);
+      this.splitPathCountdownLabel.setVisible(true);
+      this.splitPathCountdownEndMs = this.time.now + durationMs;
+  }
+
+  public stopSplitPathCountdown() {
+      this.splitPathCountdownEndMs = 0;
+      this.splitPathCountdownGfx?.clear();
+      this.splitPathCountdownGfx?.setVisible(false);
+      this.splitPathCountdownLabel?.setVisible(false);
+  }
+
+  private updateSplitPathCountdown() {
+      if (!this.splitPathCountdownEndMs) return;
+      const remaining = this.splitPathCountdownEndMs - this.time.now;
+      if (remaining <= 0) {
+          this.stopSplitPathCountdown();
+          return;
+      }
+      const total = PATH_FORK.COUNTDOWN_MS;
+      const ratio = Math.max(0, Math.min(1, remaining / total));
+      if (!this.splitPathCountdownGfx || !this.splitPathCountdownLabel) return;
+      const W = this.scale.width;
+      const cx = W / 2;
+      const cy = PATH_FORK.COUNTDOWN_Y_FROM_TOP;
+      const r = PATH_FORK.COUNTDOWN_RADIUS;
+      this.splitPathCountdownGfx.clear();
+      // BG circle
+      this.splitPathCountdownGfx.fillStyle(PATH_FORK.COUNTDOWN_BG_COLOR, 0.7);
+      this.splitPathCountdownGfx.fillCircle(cx, cy, r);
+      // Ring (arc) representing time remaining
+      this.splitPathCountdownGfx.lineStyle(4, PATH_FORK.COUNTDOWN_RING_COLOR, 1);
+      const startAngle = -Math.PI / 2;
+      const endAngle = startAngle + Math.PI * 2 * ratio;
+      this.splitPathCountdownGfx.beginPath();
+      this.splitPathCountdownGfx.arc(cx, cy, r, startAngle, endAngle, false);
+      this.splitPathCountdownGfx.strokePath();
+      // Seconds label
+      this.splitPathCountdownLabel.setText(Math.ceil(remaining / 1000).toString());
   }
 
   public triggerSpeedBoost() {
@@ -1306,6 +1399,7 @@ export class MainScene extends Phaser.Scene {
 
   private updateBridgeBanners(frameMove: number, delta: number) {
       this.updateBridgeAmbientDebris();
+      this.updateSplitPathCountdown();
       // Bridge collapse fall detection — if player is grounded over a collapsed tile, fail.
       if (this.eventManager?.eventPhase === 'BRIDGE_COLLAPSE' && !this.eventManager.bridgeFell) {
           const body = this.player?.body as Phaser.Physics.Arcade.Body | undefined;

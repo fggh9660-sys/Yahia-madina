@@ -78,37 +78,47 @@ export class PathFork extends Phaser.GameObjects.Sprite {
         const ctx = canvas.context;
         // Wooden pole
         ctx.fillStyle = `#${PATH_FORK.POLE_COLOR.toString(16).padStart(6, '0')}`;
-        ctx.fillRect(w / 2 - 3, 30, 6, h - 30);
-        // Sign board crossbar
-        ctx.fillRect(8, 8, w - 16, 22);
-        // Left arrow (cyan)
+        ctx.fillRect(w / 2 - 3, 56, 6, h - 56);
+        // Sign board background (wider, taller for labels)
+        ctx.fillRect(4, 6, w - 8, 50);
+        // Divider in middle
+        ctx.fillStyle = '#3a2f24';
+        ctx.fillRect(w / 2 - 1, 6, 2, 50);
+        // Left arrow + Knowledge label
         ctx.fillStyle = `#${PATH_FORK.ARROW_COLOR_LEFT.toString(16).padStart(6, '0')}`;
         ctx.beginPath();
-        ctx.moveTo(10, 19);
-        ctx.lineTo(20, 12);
-        ctx.lineTo(20, 16);
-        ctx.lineTo(w / 2 - 6, 16);
-        ctx.lineTo(w / 2 - 6, 22);
-        ctx.lineTo(20, 22);
-        ctx.lineTo(20, 26);
+        ctx.moveTo(8, 22);
+        ctx.lineTo(18, 14);
+        ctx.lineTo(18, 19);
+        ctx.lineTo(w / 2 - 4, 19);
+        ctx.lineTo(w / 2 - 4, 26);
+        ctx.lineTo(18, 26);
+        ctx.lineTo(18, 30);
         ctx.closePath();
         ctx.fill();
-        // Right arrow (amber)
+        // Right arrow + Speed label
         ctx.fillStyle = `#${PATH_FORK.ARROW_COLOR_RIGHT.toString(16).padStart(6, '0')}`;
         ctx.beginPath();
-        ctx.moveTo(w - 10, 19);
-        ctx.lineTo(w - 20, 12);
-        ctx.lineTo(w - 20, 16);
-        ctx.lineTo(w / 2 + 6, 16);
-        ctx.lineTo(w / 2 + 6, 22);
-        ctx.lineTo(w - 20, 22);
-        ctx.lineTo(w - 20, 26);
+        ctx.moveTo(w - 8, 22);
+        ctx.lineTo(w - 18, 14);
+        ctx.lineTo(w - 18, 19);
+        ctx.lineTo(w / 2 + 4, 19);
+        ctx.lineTo(w / 2 + 4, 26);
+        ctx.lineTo(w - 18, 26);
+        ctx.lineTo(w - 18, 30);
         ctx.closePath();
         ctx.fill();
-        // Dark outline on crossbar
+        // Arabic-style label area (placeholder rect for labels — actual text rendered as separate Phaser Text)
+        ctx.fillStyle = '#fff8e1';
+        ctx.font = 'bold 10px Cairo, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('📚', w / 4, 44);
+        ctx.fillText('⚡', (3 * w) / 4, 44);
+        // Dark outline on sign board
         ctx.strokeStyle = '#2a2018';
         ctx.lineWidth = 2;
-        ctx.strokeRect(8, 8, w - 16, 22);
+        ctx.strokeRect(4, 6, w - 8, 50);
         // Ground spike (anchor)
         ctx.fillStyle = '#3a2f24';
         ctx.beginPath();

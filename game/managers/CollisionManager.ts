@@ -9,6 +9,8 @@ import { SpeedBoost } from '../objects/SpeedBoost';
 import { RewardBox } from '../objects/RewardBox';
 import { MarketAwning } from '../objects/MarketAwning';
 import { MagicCarpet } from '../objects/MagicCarpet';
+import { KnowledgeFragment } from '../objects/KnowledgeFragment';
+import { KNOWLEDGE_FRAGMENT } from '../../constants';
 
 export class CollisionManager {
   private scene: MainScene;
@@ -50,6 +52,7 @@ export class CollisionManager {
     this.scene.physics.add.overlap(player, spawn.heartsGroup, this.handleCollectHeart, undefined, this);
     this.scene.physics.add.overlap(player, spawn.shieldsGroup, this.handleCollectShield, undefined, this);
     this.scene.physics.add.overlap(player, spawn.speedBoosts, this.handleCollectSpeedBoost, undefined, this);
+    this.scene.physics.add.overlap(player, spawn.knowledgeFragments, this.handleCollectKnowledgeFragment, undefined, this);
     this.scene.physics.add.overlap(player, spawn.rewardBoxesGroup, this.handleCollectRewardBox, undefined, this);
 
     // Magic Carpet Pickup (New)
@@ -146,6 +149,14 @@ export class CollisionManager {
       (boost as SpeedBoost).collect();
       this.scene.triggerSpeedBoost();
       this.scene.showFloatingText((boost as SpeedBoost).x, (boost as SpeedBoost).y, `+ سرعة!`, '#ffaa00');
+  }
+
+  private handleCollectKnowledgeFragment(player: any, frag: any) {
+      const f = frag as KnowledgeFragment;
+      f.collect();
+      this.scene.addScore(KNOWLEDGE_FRAGMENT.COLLECT_SCORE);
+      this.scene.showFloatingText(f.x, f.y, `+معرفة 📖`, '#4dd0ff');
+      this.scene.audioManager?.playStarPitched(1200);
   }
 
   private handleHitObstacle(player: any, obstacle: any) {

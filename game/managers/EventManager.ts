@@ -115,11 +115,13 @@ export class EventManager {
   private nextCheckpointDistance: number = 0;
   public bridgeCheckpoints: Phaser.GameObjects.Sprite[] = [];
 
-  // Branching paths (Wk 1 Day 5 — task #21)
+  // Branching paths / Split Path Event (Wk 1 Day 5 → polished per Yahia 2026-05-23 ref)
   public pathForks: PathFork[] = [];
   public activeTrack: 'NONE' | 'A' | 'B' = 'NONE';
   private trackActiveUntilMs: number = 0;
-  private lastPathForkSpawnAt: number = 0;
+  public splitPathTriggered: boolean = false;
+  public pathForkCountdownStarted: boolean = false;
+  public pathForkCountdownEndsAt: number = 0;
 
   // Puzzle sequences (storm: 3–5 puzzles; library: 3–5 puzzles)
   private stormPuzzleQueue: ActivePuzzle[] = [];
@@ -1062,24 +1064,27 @@ export class EventManager {
   }
 
   /**
-   * Branching paths (Wk 1 Day 5): spawn a fork marker every PATH_FORK.TRIGGER_INTERVAL_M
-   * in the city stage. The marker scrolls toward the player; when it reaches the input
-   * window, the player's currently-held A/D decides which track they commit to.
+   * Split Path Event (per Yahia ref doc): single-shot trigger after the collapsing bridge
+   * fully completes. Spawns the fork marker, fires Noor dialogue, starts a 2-second
+   * countdown window for the player to choose Knowledge (left) or Speed (right).
    */
   public maybeSpawnPathFork() {
+      if (this.splitPathTriggered) return;
       if (this.eventPhase !== 'NONE') return;
+      if (!this.bridgeCollapseTriggered) return; // gate behind bridge completion
       const env = this.scene.environmentManager;
       if (env.getZone() !== 'CITY') return;
       const dist = this.scene.getRunDistance();
-      if (dist - this.lastPathForkSpawnAt < PATH_FORK.TRIGGER_INTERVAL_M) return;
-      // Don't spawn near the bridge trigger so the two set-pieces don't collide
-      const env2 = env as unknown as { cityStartDistance?: number };
-      const distInCity = dist - (env2.cityStartDistance ?? 0);
-      if (distInCity >= BRIDGE_COLLAPSE.TRIGGER_DISTANCE_IN_CITY_M - 40) return;
-      this.lastPathForkSpawnAt = dist;
+      const bridgeEndDistance = this.bridgeCollapseStartDistance + BRIDGE_COLLAPSE.PHASE_LENGTH_M;
+      if (dist < bridgeEndDistance + PATH_FORK.TRIGGER_AFTER_BRIDGE_BUFFER_M) return;
+      this.splitPathTriggered = true;
       const groundY = getGroundY(this.scene.scale.height);
-      const fork = new PathFork(this.scene, this.scene.scale.width + 80, groundY);
+      const fork = new PathFork(this.scene, this.scene.scale.width + 100, groundY);
       this.pathForks.push(fork);
+      this.scene.showNoorMessage(PATH_FORK.KNOWLEDGE_NOOR_MSG, false, 'think');
+      this.pathForkCountdownStarted = true;
+      this.pathForkCountdownEndsAt = this.scene.time.now + PATH_FORK.COUNTDOWN_MS;
+      this.scene.onSplitPathCountdownStart?.(PATH_FORK.COUNTDOWN_MS);
   }
 
   /** Called each frame from MainScene — scrolls forks + resolves input window crossings. */
@@ -1125,7 +1130,9 @@ export class EventManager {
       this.pathForks = [];
       this.activeTrack = 'NONE';
       this.trackActiveUntilMs = 0;
-      this.lastPathForkSpawnAt = 0;
+      this.splitPathTriggered = false;
+      this.pathForkCountdownStarted = false;
+      this.pathForkCountdownEndsAt = 0;
   }
 
   /** Reset all collapsing-bridge state (called on scene restart or fall-to-city-entrance reset). */

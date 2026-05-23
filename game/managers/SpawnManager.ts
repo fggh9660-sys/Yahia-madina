@@ -8,6 +8,7 @@ import { RewardBox } from '../objects/RewardBox';
 import { Obstacle, type ObstacleType } from '../objects/Obstacle';
 import { FallingDebris } from '../objects/FallingDebris';
 import { SpeedBoost } from '../objects/SpeedBoost';
+import { KnowledgeFragment } from '../objects/KnowledgeFragment';
 import { MerchantCart } from '../objects/MerchantCart';
 import { StackOfRugs } from '../objects/StackOfRugs';
 import { MarketAwning } from '../objects/MarketAwning';
@@ -25,6 +26,7 @@ export class SpawnManager {
   public obstacles!: Phaser.GameObjects.Group;
   public fallingDebris!: Phaser.GameObjects.Group;
   public speedBoosts!: Phaser.GameObjects.Group;
+  public knowledgeFragments!: Phaser.GameObjects.Group;
   public merchantCarts!: Phaser.GameObjects.Group;
   public rugStacks!: Phaser.GameObjects.Group;
   public marketAwnings!: Phaser.GameObjects.Group;
@@ -69,6 +71,8 @@ export class SpawnManager {
     FallingDebris.generateTexture(this.scene);
     this.speedBoosts = this.scene.add.group({ classType: SpeedBoost, runChildUpdate: false });
     SpeedBoost.generateTexture(this.scene);
+    this.knowledgeFragments = this.scene.add.group({ classType: KnowledgeFragment, runChildUpdate: false });
+    KnowledgeFragment.generateTexture(this.scene);
     this.merchantCarts = this.scene.add.group({ classType: MerchantCart, runChildUpdate: false });
     this.rugStacks = this.scene.add.group({ classType: StackOfRugs, runChildUpdate: false });
     this.marketAwnings = this.scene.add.group({ classType: MarketAwning, runChildUpdate: false });
@@ -87,6 +91,7 @@ export class SpawnManager {
     this.obstacles.clear(true, true);
     this.fallingDebris.clear(true, true);
     this.speedBoosts.clear(true, true);
+    this.knowledgeFragments?.clear(true, true);
     this.merchantCarts.clear(true, true);
     this.rugStacks.clear(true, true);
     this.marketAwnings.clear(true, true);
@@ -119,6 +124,7 @@ export class SpawnManager {
         return true;
     });
     updateGroup(this.speedBoosts);
+    updateGroup(this.knowledgeFragments);
     updateGroup(this.merchantCarts);
     updateGroup(this.rugStacks);
     updateGroup(this.marketAwnings);
@@ -816,6 +822,7 @@ export class SpawnManager {
       this.obstacles.clear(true, true);
       this.fallingDebris.clear(true, true);
       this.speedBoosts.clear(true, true);
+      this.knowledgeFragments?.clear(true, true);
       this.merchantCarts.clear(true, true);
       this.rugStacks.clear(true, true);
       this.marketAwnings.clear(true, true);
