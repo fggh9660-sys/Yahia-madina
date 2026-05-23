@@ -89,6 +89,7 @@ export class MainScene extends Phaser.Scene {
   private edgeTimeMs: number = 0;
   private pathHudBg: Phaser.GameObjects.Graphics | null = null;
   private pathHudLabel: Phaser.GameObjects.Text | null = null;
+  private bridgeAmbientDebrisEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
   // UI State
   private activeMessage: string | null = null; 
@@ -422,6 +423,7 @@ export class MainScene extends Phaser.Scene {
     this.edgeTimeMs = 0;
     this.pathHudBg = null;
     this.pathHudLabel = null;
+    this.bridgeAmbientDebrisEmitter = null;
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
@@ -780,6 +782,45 @@ export class MainScene extends Phaser.Scene {
    * Path fork resolution callback fired by EventManager. Updates the small HUD label
    * showing current track + plays a confirm audio cue when a side is committed.
    */
+  /**
+   * Ambient debris falling continuously during the collapsing bridge — small rocks/dust
+   * drift down from above the bridge edges into the void. Density escalates with phase
+   * progress so the late bridge feels visibly more chaotic.
+   */
+  public startBridgeAmbientDebris() {
+      if (!this.textures.exists('dust_particle')) return;
+      if (this.bridgeAmbientDebrisEmitter?.active) return;
+      const W = this.scale.width;
+      const H = this.scale.height;
+      this.bridgeAmbientDebrisEmitter = this.add.particles(0, 0, 'dust_particle', {
+          x: { min: 0, max: W },
+          y: { min: H * 0.1, max: H * 0.45 },
+          speedY: { min: BRIDGE_COLLAPSE.AMBIENT_DEBRIS_SPEED_MIN, max: BRIDGE_COLLAPSE.AMBIENT_DEBRIS_SPEED_MAX },
+          speedX: { min: -40, max: 40 },
+          lifespan: BRIDGE_COLLAPSE.AMBIENT_DEBRIS_LIFESPAN_MS,
+          scale: { start: 0.5, end: 0 },
+          alpha: { start: 0.7, end: 0 },
+          tint: 0x8a7a6a,
+          quantity: 1,
+          frequency: BRIDGE_COLLAPSE.AMBIENT_DEBRIS_EMIT_MS_EARLY,
+          emitting: true,
+      }).setDepth(13).setScrollFactor(0);
+  }
+
+  public stopBridgeAmbientDebris() {
+      if (this.bridgeAmbientDebrisEmitter?.active) this.bridgeAmbientDebrisEmitter.stop();
+  }
+
+  /** Called each frame to ramp ambient debris density based on phase progress. */
+  private updateBridgeAmbientDebris() {
+      if (!this.bridgeAmbientDebrisEmitter?.active) return;
+      if (this.eventManager?.eventPhase !== 'BRIDGE_COLLAPSE') return;
+      const p = this.eventManager.getBridgeCollapseProgress?.() ?? 0;
+      const earlyMs = BRIDGE_COLLAPSE.AMBIENT_DEBRIS_EMIT_MS_EARLY;
+      const lateMs = BRIDGE_COLLAPSE.AMBIENT_DEBRIS_EMIT_MS_LATE;
+      this.bridgeAmbientDebrisEmitter.frequency = earlyMs + (lateMs - earlyMs) * p;
+  }
+
   public onPathChosen(side: 'A' | 'B' | 'NONE') {
       if (side === 'NONE') {
           if (this.pathHudBg) this.pathHudBg.setVisible(false);
@@ -1259,6 +1300,7 @@ export class MainScene extends Phaser.Scene {
   }
 
   private updateBridgeBanners(frameMove: number, delta: number) {
+      this.updateBridgeAmbientDebris();
       // Bridge collapse fall detection — if player is grounded over a collapsed tile, fail.
       if (this.eventManager?.eventPhase === 'BRIDGE_COLLAPSE' && !this.eventManager.bridgeFell) {
           const body = this.player?.body as Phaser.Physics.Arcade.Body | undefined;
@@ -1380,18 +1422,39 @@ export class MainScene extends Phaser.Scene {
       );
       this.audioManager?.playDamage();
       this.showFloatingText(this.player.x, this.player.y - 60, "سقطت! 💢", '#ff4d4d');
-      // Fade out then restart from city entrance
-      this.cameras.main.fadeOut(550, 0, 0, 0);
+      // Quick fade-to-black then respawn at last checkpoint (or city entrance if out of hearts).
+      this.cameras.main.fadeOut(450, 0, 0, 0);
       this.cameras.main.once('camerafadeoutcomplete', () => {
-          this.restartFromCityEntrance();
-          this.cameras.main.fadeIn(450);
+          this.handleBridgeFallRespawn();
+          this.cameras.main.fadeIn(350);
       });
   }
 
   /**
-   * Bridge fail recovery: take damage + reset player to start of city stage, clean up
-   * bridge tiles so the next encounter starts fresh. Player run distance is rewound to
-   * the city start so they replay the full city stage approach. (Per Yahia 2026-05-22 spec.)
+   * Yahia 2026-05-23 spec: a single fall does NOT restart the city — player loses 1 heart and
+   * respawns at the last passed checkpoint on the bridge. Only when all hearts are gone does
+   * the run end and the player goes back to City Entrance via the normal game-over flow.
+   */
+  private handleBridgeFallRespawn() {
+      this.damagePlayer();
+      if (this.isGameOver) {
+          // Out of hearts — game over flow handles return to start; this is the "back to
+          // City Entrance" end-state from Yahia's flowchart.
+          return;
+      }
+      const checkpointX = this.eventManager.lastBridgeCheckpointX || getPlayerStartX(this.scale.width);
+      this.player.x = checkpointX;
+      this.player.y = getPlayerSpawnY(this.scale.height);
+      this.player.setRotation(0);
+      this.player.setVelocity(0, 0);
+      this.edgeTimeMs = 0;
+      this.eventManager.bridgeFell = false;
+      this.showFloatingText(this.player.x, this.player.y - 80, "نقطة تفتيش!", '#4ade80');
+  }
+
+  /**
+   * (Legacy from Yahia 2026-05-22 — full city restart on fall) — kept for game-over end-state
+   * when all hearts are depleted. Called by damagePlayer's fatal path via gameOver flow.
    */
   private restartFromCityEntrance() {
       // Take damage (may game-over)

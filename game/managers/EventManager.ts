@@ -101,13 +101,19 @@ export class EventManager {
   private bridgeGustTimers: Phaser.Time.TimerEvent[] = [];
   public bridgeGustActive: boolean = false;
 
-  // Collapsing bridge (Wk1 Day 5 — Yahia 2026-05-22 pivot)
+  // Collapsing bridge (Wk1 Day 5 — Yahia 2026-05-22 pivot + 2026-05-23 sectioned/checkpoint refinement)
   public bridgeCollapseTriggered: boolean = false;
   private bridgeCollapseStartDistance: number = 0;
   private bridgeCollapseStartTime: number = 0;
   public bridgeTiles: BridgeTile[] = [];
   private bridgeTileSpawnX: number = 0;
+  private bridgeSectionCounter: number = 0;
+  private nextSectionRemaining: number = 0;
+  private currentSectionId: number = 0;
   private bridgeCollapseSchedTimer: Phaser.Time.TimerEvent | null = null;
+  public lastBridgeCheckpointX: number = 0;
+  private nextCheckpointDistance: number = 0;
+  public bridgeCheckpoints: Phaser.GameObjects.Sprite[] = [];
 
   // Branching paths (Wk 1 Day 5 — task #21)
   public pathForks: PathFork[] = [];
@@ -817,17 +823,43 @@ export class EventManager {
       const tileTopY = groundY - BRIDGE_COLLAPSE.TILE_HEIGHT / 2 - 2;
       const playerX = this.scene.player?.x ?? getPlayerStartX(this.scene.scale.width);
       // Pre-fill tiles from a bit before the player to past the right edge — bridge surface
-      // is visible immediately when the phase begins.
+      // is visible immediately when the phase begins. Tiles are grouped into sections so the
+      // collapse picks a contiguous chunk rather than a single tile.
       const startTileX = playerX - BRIDGE_COLLAPSE.TILE_WIDTH * 2;
       const endTileX = this.scene.scale.width + 400;
       const tileCount = Math.ceil((endTileX - startTileX) / BRIDGE_COLLAPSE.TILE_WIDTH);
+      this.bridgeSectionCounter = 0;
+      this.nextSectionRemaining = 0;
       for (let i = 0; i < tileCount; i++) {
           const t = new BridgeTile(this.scene, startTileX + i * BRIDGE_COLLAPSE.TILE_WIDTH, tileTopY);
+          t.sectionId = this.assignSectionId();
           this.bridgeTiles.push(t);
       }
       this.bridgeTileSpawnX = startTileX + tileCount * BRIDGE_COLLAPSE.TILE_WIDTH;
+      this.lastBridgeCheckpointX = playerX;
+      this.nextCheckpointDistance = this.bridgeCollapseStartDistance + BRIDGE_COLLAPSE.CHECKPOINT_INTERVAL_M;
+      this.scene.startBridgeAmbientDebris?.();
       this.scheduleNextCollapse();
       return true;
+  }
+
+  /** Returns the next section ID — increments after `currentSectionSize()` tiles are placed in that section. */
+  private assignSectionId(): number {
+      if (this.nextSectionRemaining <= 0) {
+          this.bridgeSectionCounter++;
+          this.currentSectionId = this.bridgeSectionCounter;
+          this.nextSectionRemaining = this.currentSectionSize();
+      }
+      this.nextSectionRemaining--;
+      return this.currentSectionId;
+  }
+
+  /** Section size escalates with phase progress per Yahia's progression spec. */
+  private currentSectionSize(): number {
+      const p = this.getBridgeCollapseProgress();
+      if (p < BRIDGE_COLLAPSE.EARLY_PHASE_END_RATIO) return BRIDGE_COLLAPSE.SECTION_SIZE_EARLY;
+      if (p < BRIDGE_COLLAPSE.MID_PHASE_END_RATIO) return BRIDGE_COLLAPSE.SECTION_SIZE_MID;
+      return BRIDGE_COLLAPSE.SECTION_SIZE_LATE;
   }
 
   /** Picks the right collapse interval based on phase progress and schedules the next tile crack. */
@@ -844,12 +876,21 @@ export class EventManager {
       else if (progress < BRIDGE_COLLAPSE.MID_PHASE_END_RATIO) interval = BRIDGE_COLLAPSE.MID_COLLAPSE_INTERVAL_MS;
       else interval = BRIDGE_COLLAPSE.LATE_COLLAPSE_INTERVAL_MS;
 
-      // Pick a tile in the right-half of the screen that's still normal to crack
+      // Pick a SECTION (group of tiles sharing sectionId) in the right-half of the screen
+      // so the collapse reads as a chunk breaking rather than a single isolated tile.
       const W = this.scene.scale.width;
-      const candidates = this.bridgeTiles.filter(t => t.active && t.tileState === 'normal' && t.x > W * 0.45 && t.x < W + 100);
+      const candidates = this.bridgeTiles.filter(
+          t => t.active && t.tileState === 'normal' && t.x > W * 0.4 && t.x < W + 100,
+      );
       if (candidates.length > 0) {
           const pick = candidates[Phaser.Math.Between(0, candidates.length - 1)];
-          pick.startCrack();
+          const sectionTiles = this.bridgeTiles.filter(t => t.active && t.tileState === 'normal' && t.sectionId === pick.sectionId);
+          // Stagger crack starts across the section for a "spreading" visual effect.
+          sectionTiles.forEach((tile, i) => {
+              this.scene.time.delayedCall(i * BRIDGE_COLLAPSE.CRACK_SPREAD_STAGGER_MS, () => {
+                  if (tile.active) tile.startCrack();
+              });
+          });
       }
       this.bridgeCollapseSchedTimer = this.scene.time.delayedCall(interval, () => this.scheduleNextCollapse());
   }
@@ -890,10 +931,79 @@ export class EventManager {
               const groundY = getGroundY(this.scene.scale.height);
               const tileTopY = groundY - BRIDGE_COLLAPSE.TILE_HEIGHT / 2 - 2;
               const t = new BridgeTile(this.scene, this.scene.scale.width + 220, tileTopY);
+              t.sectionId = this.assignSectionId();
               this.bridgeTiles.push(t);
               this.bridgeTileSpawnX = this.scene.scale.width + 220 + BRIDGE_COLLAPSE.TILE_WIDTH;
           }
+          this.updateBridgeCheckpoints(frameMove);
       }
+  }
+
+  /** Update checkpoint sprites + spawn new ones at safe spacing. Track when player passes a
+   *  checkpoint so fall-respawn uses the most recent safe x position. */
+  private updateBridgeCheckpoints(frameMove: number) {
+      const dist = this.scene.getRunDistance();
+      const groundY = getGroundY(this.scene.scale.height);
+      // Spawn new checkpoint if we've passed the spacing interval
+      if (dist >= this.nextCheckpointDistance && dist - this.bridgeCollapseStartDistance < BRIDGE_COLLAPSE.PHASE_LENGTH_M) {
+          this.nextCheckpointDistance += BRIDGE_COLLAPSE.CHECKPOINT_INTERVAL_M;
+          const flag = this.spawnCheckpointFlag(this.scene.scale.width + 100, groundY);
+          this.bridgeCheckpoints.push(flag);
+      }
+      // Scroll + cull
+      const playerX = this.scene.player?.x ?? 0;
+      for (let i = this.bridgeCheckpoints.length - 1; i >= 0; i--) {
+          const flag = this.bridgeCheckpoints[i];
+          if (!flag.active) {
+              this.bridgeCheckpoints.splice(i, 1);
+              continue;
+          }
+          flag.x -= frameMove;
+          // Flags are now cosmetic progress markers only — fall respawn always returns to
+          // the bridge start (lastBridgeCheckpointX set once at trigger). Per Nanda 2026-05-23.
+          if (flag.x <= playerX + 4 && flag.x > playerX - 100 && !(flag as unknown as { passed?: boolean }).passed) {
+              (flag as unknown as { passed: boolean }).passed = true;
+              this.scene.tweens.add({
+                  targets: flag,
+                  scale: { from: 1, to: 1.3 },
+                  duration: 220,
+                  yoyo: true,
+                  ease: 'Sine.easeOut',
+              });
+              flag.setTint(0x9be8b0);
+          }
+          if (flag.x < -50) {
+              flag.destroy();
+              this.bridgeCheckpoints.splice(i, 1);
+          }
+      }
+  }
+
+  /** Generate a small green checkpoint flag (canvas-textured) at the given ground position. */
+  private spawnCheckpointFlag(x: number, groundY: number): Phaser.GameObjects.Sprite {
+      const TEX = 'bridge_checkpoint_flag';
+      if (!this.scene.textures.exists(TEX)) {
+          const w = 16, h = 70;
+          const canvas = this.scene.textures.createCanvas(TEX, w, h);
+          if (canvas) {
+              const ctx = canvas.context;
+              // Pole
+              ctx.fillStyle = '#3a2f24';
+              ctx.fillRect(w / 2 - 1, 0, 2, h);
+              // Flag (green pennant)
+              ctx.fillStyle = `#${BRIDGE_COLLAPSE.CHECKPOINT_FLAG_COLOR.toString(16).padStart(6, '0')}`;
+              ctx.beginPath();
+              ctx.moveTo(w / 2, 4);
+              ctx.lineTo(w, 12);
+              ctx.lineTo(w / 2, 22);
+              ctx.closePath();
+              ctx.fill();
+              canvas.refresh();
+          }
+      }
+      const flag = this.scene.add.sprite(x, groundY - 12, TEX);
+      flag.setOrigin(0.5, 1).setDepth(11);
+      return flag;
   }
 
   /** Called every frame; exits BRIDGE_COLLAPSE phase when segment is fully traversed. */
@@ -903,6 +1013,7 @@ export class EventManager {
       if (dist >= BRIDGE_COLLAPSE.PHASE_LENGTH_M) {
           this.eventPhase = 'NONE';
           this.scene.setBridgeWindActive?.(false);
+          this.scene.stopBridgeAmbientDebris?.();
           if (this.bridgeCollapseSchedTimer) this.bridgeCollapseSchedTimer.remove(false);
           this.bridgeCollapseSchedTimer = null;
           if (!this.bridgeFell) {
@@ -1008,9 +1119,18 @@ export class EventManager {
           if (t.active) t.destroy();
       }
       this.bridgeTiles = [];
+      for (const c of this.bridgeCheckpoints) {
+          if (c.active) c.destroy();
+      }
+      this.bridgeCheckpoints = [];
       this.bridgeCollapseTriggered = false;
       this.bridgeCollapseStartDistance = 0;
       this.bridgeCollapseStartTime = 0;
+      this.bridgeSectionCounter = 0;
+      this.nextSectionRemaining = 0;
+      this.lastBridgeCheckpointX = 0;
+      this.nextCheckpointDistance = 0;
+      this.scene.stopBridgeAmbientDebris?.();
       if (this.eventPhase === 'BRIDGE_COLLAPSE') {
           this.eventPhase = 'NONE';
           this.scene.setBridgeWindActive?.(false);

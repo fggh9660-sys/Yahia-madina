@@ -19,6 +19,7 @@ export class BridgeTile extends Phaser.GameObjects.Sprite {
     declare destroy: (fromScene?: boolean) => void;
 
     public tileState: BridgeTileState = 'normal';
+    public sectionId: number = -1;
     private crackTween: Phaser.Tweens.Tween | null = null;
     private crackTimer: Phaser.Time.TimerEvent | null = null;
 
