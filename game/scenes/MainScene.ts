@@ -93,6 +93,9 @@ export class MainScene extends Phaser.Scene {
   private splitPathCountdownGfx: Phaser.GameObjects.Graphics | null = null;
   private splitPathCountdownLabel: Phaser.GameObjects.Text | null = null;
   private splitPathCountdownEndMs: number = 0;
+  private splitPathHintLeft: Phaser.GameObjects.Text | null = null;
+  private splitPathHintRight: Phaser.GameObjects.Text | null = null;
+  private splitPathPrevSpeed: number = 1;
   private bridgeAmbientDebrisEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
   // UI State
@@ -431,6 +434,9 @@ export class MainScene extends Phaser.Scene {
     this.splitPathCountdownGfx = null;
     this.splitPathCountdownLabel = null;
     this.splitPathCountdownEndMs = 0;
+    this.splitPathHintLeft = null;
+    this.splitPathHintRight = null;
+    this.splitPathPrevSpeed = 1;
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
@@ -841,13 +847,27 @@ export class MainScene extends Phaser.Scene {
       const labelAr = side === 'A' ? PATH_FORK.KNOWLEDGE_LABEL_AR : PATH_FORK.SPEED_LABEL_AR;
       this.showFloatingText(this.player.x, this.player.y - 90, side === 'A' ? `${labelAr} 📚` : `${labelAr} ⚡`, side === 'A' ? '#4dd0ff' : '#ffaa00');
 
-      // Trigger path-specific rewards
+      // Trigger path-specific rewards + visible lane shift
       if (side === 'A') {
-          // Path of Knowledge — extra stars + 1 knowledge fragment + bonus score
+          // Path of Knowledge — auto-tween player up to upper lane + spawn upper platform tiles
           this.addScore(PATH_FORK.KNOWLEDGE_BONUS_SCORE);
           this.spawnKnowledgePathRewards();
+          this.eventManager.startUpperLane();
+          const targetY = getPlayerSpawnY(this.scale.height) - PATH_FORK.UPPER_LANE_Y_OFFSET;
+          const body = this.player.body as Phaser.Physics.Arcade.Body;
+          body.setAllowGravity(false);
+          body.setVelocity(0, 0);
+          this.tweens.add({
+              targets: this.player,
+              y: targetY,
+              duration: PATH_FORK.PLAYER_LANE_TWEEN_MS,
+              ease: 'Sine.easeOut',
+              onComplete: () => {
+                  body.setAllowGravity(true);
+              },
+          });
       } else {
-          // Path of Speed — auto speed boost + score
+          // Path of Speed — auto speed boost + score (player stays on lower lane)
           this.addScore(PATH_FORK.SPEED_BONUS_SCORE);
           this.triggerSpeedBoost();
       }
@@ -902,7 +922,7 @@ export class MainScene extends Phaser.Scene {
       this.spawnManager?.knowledgeFragments.add(new KnowledgeFragment(this, fragX, fragY));
   }
 
-  /** Split Path 2-second countdown timer — circle UI counting down before the input window closes. */
+  /** Split Path 2-second countdown timer — circle UI + hold-key hints + slow-motion. */
   public onSplitPathCountdownStart(durationMs: number) {
       const W = this.scale.width;
       const cx = W / 2;
@@ -919,6 +939,39 @@ export class MainScene extends Phaser.Scene {
       this.splitPathCountdownGfx.setVisible(true);
       this.splitPathCountdownLabel.setVisible(true);
       this.splitPathCountdownEndMs = this.time.now + durationMs;
+
+      // Slow time during countdown for a cinematic decision moment
+      this.splitPathPrevSpeed = this.getGameSpeed();
+      this.setGameSpeed(this.splitPathPrevSpeed * PATH_FORK.COUNTDOWN_SLOWMO_SCALE);
+
+      // Hold-key hints — large color-coded labels on either side of the countdown
+      const hintY = PATH_FORK.HINT_Y_FROM_TOP;
+      if (!this.splitPathHintLeft) {
+          this.splitPathHintLeft = this.add.text(cx - PATH_FORK.HINT_GAP_PX, hintY, '', {
+              fontFamily: 'Cairo', fontSize: `${PATH_FORK.HINT_FONT_SIZE}px`, fontStyle: 'bold',
+              color: `#${PATH_FORK.ARROW_COLOR_LEFT.toString(16).padStart(6, '0')}`,
+              stroke: '#000', strokeThickness: 3,
+          }).setOrigin(0.5, 0.5).setDepth(499).setScrollFactor(0);
+      }
+      if (!this.splitPathHintRight) {
+          this.splitPathHintRight = this.add.text(cx + PATH_FORK.HINT_GAP_PX, hintY, '', {
+              fontFamily: 'Cairo', fontSize: `${PATH_FORK.HINT_FONT_SIZE}px`, fontStyle: 'bold',
+              color: `#${PATH_FORK.ARROW_COLOR_RIGHT.toString(16).padStart(6, '0')}`,
+              stroke: '#000', strokeThickness: 3,
+          }).setOrigin(0.5, 0.5).setDepth(499).setScrollFactor(0);
+      }
+      this.splitPathHintLeft.setText('A 📚 العلم').setVisible(true).setAlpha(0);
+      this.splitPathHintRight.setText('D ⚡ السرعة').setVisible(true).setAlpha(0);
+      this.tweens.add({ targets: [this.splitPathHintLeft, this.splitPathHintRight], alpha: 1, duration: 220 });
+      // Subtle pulse to draw the eye
+      this.tweens.add({
+          targets: [this.splitPathHintLeft, this.splitPathHintRight],
+          scale: { from: 1, to: 1.1 },
+          duration: 480,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+      });
   }
 
   public stopSplitPathCountdown() {
@@ -926,6 +979,31 @@ export class MainScene extends Phaser.Scene {
       this.splitPathCountdownGfx?.clear();
       this.splitPathCountdownGfx?.setVisible(false);
       this.splitPathCountdownLabel?.setVisible(false);
+      // Restore game speed
+      if (this.splitPathPrevSpeed && this.getGameSpeed() < this.splitPathPrevSpeed) {
+          this.setGameSpeed(this.splitPathPrevSpeed);
+      }
+      // Hide hint labels
+      if (this.splitPathHintLeft) {
+          this.tweens.killTweensOf(this.splitPathHintLeft);
+          this.splitPathHintLeft.setScale(1);
+          this.tweens.add({
+              targets: this.splitPathHintLeft,
+              alpha: 0,
+              duration: 220,
+              onComplete: () => this.splitPathHintLeft?.setVisible(false),
+          });
+      }
+      if (this.splitPathHintRight) {
+          this.tweens.killTweensOf(this.splitPathHintRight);
+          this.splitPathHintRight.setScale(1);
+          this.tweens.add({
+              targets: this.splitPathHintRight,
+              alpha: 0,
+              duration: 220,
+              onComplete: () => this.splitPathHintRight?.setVisible(false),
+          });
+      }
   }
 
   private updateSplitPathCountdown() {

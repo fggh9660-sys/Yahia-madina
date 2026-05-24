@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { PROGRESS, BRIDGE_WIND, BRIDGE_COLLAPSE, PATH_FORK, PHYSICS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
 import { BridgeTile } from '../objects/BridgeTile';
 import { PathFork } from '../objects/PathFork';
+import { PathLaneTile } from '../objects/PathLaneTile';
 import { Star } from '../objects/Star';
 import { MainScene } from '../scenes/MainScene';
 import { MagicGate } from '../objects/MagicGate';
@@ -122,6 +123,10 @@ export class EventManager {
   public splitPathTriggered: boolean = false;
   public pathForkCountdownStarted: boolean = false;
   public pathForkCountdownEndsAt: number = 0;
+  // Two-lane rendering (Yahia 2026-05-24 follow-up)
+  public pathLaneTiles: PathLaneTile[] = [];
+  private upperLaneSpawnX: number = 0;
+  private upperLaneActive: boolean = false;
 
   // Puzzle sequences (storm: 3–5 puzzles; library: 3–5 puzzles)
   private stormPuzzleQueue: ActivePuzzle[] = [];
@@ -143,6 +148,7 @@ export class EventManager {
       this.updateBridgeTiles(frameMove);
       this.maybeSpawnPathFork();
       this.updatePathForks(frameMove);
+      this.updateUpperLane(frameMove);
       if (this.currentGate) {
           if (this.currentGate.active) this.currentGate.update(frameMove);
           else this.currentGate = null;
@@ -1119,8 +1125,8 @@ export class EventManager {
           const prev = this.activeTrack;
           this.activeTrack = 'NONE';
           this.scene.onPathChosen?.('NONE');
-          // Floating message handled by MainScene if it wants
-          void prev;
+          // Stop upper lane spawn — existing tiles scroll off naturally, player walks off + falls
+          if (prev === 'A') this.stopUpperLane();
       }
   }
 
@@ -1133,6 +1139,58 @@ export class EventManager {
       this.splitPathTriggered = false;
       this.pathForkCountdownStarted = false;
       this.pathForkCountdownEndsAt = 0;
+      this.stopUpperLane();
+  }
+
+  /** Start upper-lane platform tile spawning — called when player commits Knowledge path. */
+  public startUpperLane() {
+      if (this.upperLaneActive) return;
+      this.upperLaneActive = true;
+      const groundY = getGroundY(this.scene.scale.height);
+      const upperY = groundY - PATH_FORK.UPPER_LANE_Y_OFFSET;
+      const playerX = this.scene.player?.x ?? getPlayerStartX(this.scene.scale.width);
+      // Pre-fill tiles from a bit before player to past right edge
+      const startTileX = playerX - PATH_FORK.LANE_TILE_WIDTH * 2;
+      const endTileX = this.scene.scale.width + 400;
+      const count = Math.ceil((endTileX - startTileX) / PATH_FORK.LANE_TILE_WIDTH);
+      for (let i = 0; i < count; i++) {
+          const t = new PathLaneTile(this.scene, startTileX + i * PATH_FORK.LANE_TILE_WIDTH, upperY);
+          this.pathLaneTiles.push(t);
+      }
+      this.upperLaneSpawnX = startTileX + count * PATH_FORK.LANE_TILE_WIDTH;
+      // Wire collision with player so they can stand on the lane
+      this.scene.physics.add.collider(this.scene.player, this.pathLaneTiles);
+  }
+
+  /** Stop spawning new upper-lane tiles. Existing tiles scroll off naturally. */
+  public stopUpperLane() {
+      this.upperLaneActive = false;
+      // Don't destroy existing tiles — let them scroll off so player can run off the end naturally
+  }
+
+  /** Continuous tile generation + scroll + cleanup, called each frame. */
+  public updateUpperLane(frameMove: number) {
+      // Scroll + cull existing tiles
+      for (let i = this.pathLaneTiles.length - 1; i >= 0; i--) {
+          const t = this.pathLaneTiles[i];
+          if (!t.active) {
+              this.pathLaneTiles.splice(i, 1);
+              continue;
+          }
+          t.scrollWith(frameMove);
+      }
+      // Spawn new tiles only while lane is active
+      if (this.upperLaneActive) {
+          this.upperLaneSpawnX -= frameMove;
+          if (this.upperLaneSpawnX < this.scene.scale.width + 200) {
+              const groundY = getGroundY(this.scene.scale.height);
+              const upperY = groundY - PATH_FORK.UPPER_LANE_Y_OFFSET;
+              const t = new PathLaneTile(this.scene, this.scene.scale.width + 220, upperY);
+              this.pathLaneTiles.push(t);
+              this.scene.physics.add.collider(this.scene.player, t);
+              this.upperLaneSpawnX = this.scene.scale.width + 220 + PATH_FORK.LANE_TILE_WIDTH;
+          }
+      }
   }
 
   /** Reset all collapsing-bridge state (called on scene restart or fall-to-city-entrance reset). */
