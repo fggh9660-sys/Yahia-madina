@@ -157,13 +157,16 @@ export class CollisionManager {
       f.collect();
       this.scene.addScore(KNOWLEDGE_FRAGMENT.COLLECT_SCORE);
       this.scene.showFloatingText(f.x, f.y, `+معرفة 📖`, '#4dd0ff');
+      this.scene.audioManager?.playStarPitched(1200);
 
-      // M2: surface the lore note via Noor message so the pickup feels meaningful.
+      // M2-R1: surface the lore via dedicated full-pause modal instead of Noor message.
+      // Noor is now reserved for the 4 moments listed in feedback_yahia_scope_add_post_ship_pattern
+      // (stage transitions, rare fragment discovery, low HP, major combo). The "rare discovery"
+      // Noor line is fired here when the fragment is flagged isRare.
       const lore = f.loreId ? findLoreFragment(f.loreId) : undefined;
       if (lore) {
-          this.scene.showNoorMessage(`📖 ${lore.title}\n${lore.body}`, false, 'encourage');
+          this.scene.showFragmentLore({ id: lore.id, title: lore.title, body: lore.body }, f.isRare);
       }
-      this.scene.audioManager?.playStarPitched(1200);
   }
 
   private handleHitObstacle(player: any, obstacle: any) {

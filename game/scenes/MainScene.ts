@@ -108,7 +108,11 @@ export class MainScene extends Phaser.Scene {
   private messageTimer: Phaser.Time.TimerEvent | null = null;
   private isSoftPaused: boolean = false;
   private isPausedMenu: boolean = false; 
-  private activeQuestion: Question | null = null; 
+  private activeQuestion: Question | null = null;
+  // M2-R1: active fragment lore modal — when set, gameplay is paused and GameUI shows the lore card.
+  private activeFragmentLore: { id: string; title: string; body: string; isRare?: boolean } | null = null;
+  // M2-R1b: once-per-run gate for the stage_2_enter Noor line so it can't refire on stage replay.
+  private hasFiredStage2NoorThisRun: boolean = false;
   private questionPool: Question[] = [];
   
   // Stage results (desert end / library event)
@@ -450,7 +454,9 @@ export class MainScene extends Phaser.Scene {
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
     this.questionPool = getQuestions(this.currentStage);
-    
+    this.activeFragmentLore = null;
+    this.hasFiredStage2NoorThisRun = false;
+
     this.guideFlags = { welcome: false, firstJump: false, firstGate: false };
     this.firstObstacleRef = null;
     
@@ -544,8 +550,9 @@ export class MainScene extends Phaser.Scene {
       this.baseSpeed = PHYSICS.RUN_SPEED + ((this.currentStage - 1) * 20);
       // M2: refresh question pool with stage-themed set (heritage→knowledge on Stage 2).
       this.questionPool = getQuestions(this.currentStage);
-      // M2: contextual Noor line on stage transition.
-      if (this.currentStage === 2) {
+      // M2-R1b: stage transition Noor line, gated to once per run via hasFiredStage2NoorThisRun.
+      if (this.currentStage === 2 && !this.hasFiredStage2NoorThisRun) {
+          this.hasFiredStage2NoorThisRun = true;
           const line = pickNoorLine('stage_2_enter');
           if (line) this.showNoorMessage(line.text, false, line.tone);
       }
@@ -1126,10 +1133,9 @@ export class MainScene extends Phaser.Scene {
       if (tierChanged && this.comboTier > prevTier) {
           this.addBondPoints(NOOR_BOND_REWARDS.COMBO_TIER_UP);
           this.hitStop(HITSTOP.TIER_UP_MS, HITSTOP.TIER_UP_SCALE);
-          // M2: contextual Noor line on combo tier milestones (mid at tier 2, high at tier 3+).
-          const cue = this.comboTier >= 3 ? 'combo_milestone_high' : (this.comboTier === 2 ? 'combo_milestone_mid' : null);
-          if (cue) {
-              const line = pickNoorLine(cue);
+          // M2-R1b: Noor only fires on MAJOR combo streaks (tier 3+). Tier 2 dropped per Yahia note.
+          if (this.comboTier >= 3) {
+              const line = pickNoorLine('combo_milestone_high');
               if (line) this.showNoorMessage(line.text, false, line.tone);
           }
       }
@@ -1893,6 +1899,34 @@ export class MainScene extends Phaser.Scene {
       }
   }
 
+  /**
+   * M2-R1: pause gameplay + surface the lore card UI. GameUI renders a tap-to-dismiss modal.
+   * Used on knowledge fragment pickup so the player can read without dodging in the background.
+   */
+  public showFragmentLore(lore: { id: string; title: string; body: string }, isRare: boolean = false) {
+      if (this.activeFragmentLore || this.activeQuestion || this.isPausedMenu || this.isGameOver) return;
+      this.activeFragmentLore = { ...lore, isRare };
+      this.speedModifier = 0;
+      this.player.anims.pause();
+      if (this.physics.world.isPaused === false) this.physics.pause();
+      // M2-R1b: only rare/discovery fragments trigger a Noor line — keeps Noor reserved.
+      if (isRare) {
+          const line = pickNoorLine('rare_fragment_discovery');
+          if (line) this.showNoorMessage(line.text, false, line.tone);
+      }
+      this.syncUI();
+  }
+
+  /** M2-R1: dismiss the lore modal and resume gameplay. Called from GameUI tap-anywhere handler. */
+  public dismissFragmentLore() {
+      if (!this.activeFragmentLore) return;
+      this.activeFragmentLore = null;
+      if (this.physics.world.isPaused) this.physics.resume();
+      this.player.anims.resume();
+      this.speedModifier = 1.0;
+      this.syncUI();
+  }
+
   public showFloatingText(x: number, y: number, text: string, color: string = '#ffd700') {
       const txt = this.add.text(x, y, text, {
           fontFamily: 'Cairo', fontSize: '24px', fontStyle: 'bold', color: color, stroke: '#000', strokeThickness: 3
@@ -2208,7 +2242,8 @@ export class MainScene extends Phaser.Scene {
           soundEnabled: this.getSoundEnabled(),
           musicEnabled: this.getMusicEnabled(),
           activePuzzle: this.activePuzzle,
-          isPaused: this.isPausedMenu
+          isPaused: this.isPausedMenu,
+          activeFragmentLore: this.activeFragmentLore,
       });
   }
 

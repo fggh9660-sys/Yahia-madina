@@ -95,7 +95,8 @@ function App() {
         soundEnabled: d.soundEnabled !== undefined ? (d.soundEnabled as boolean) : prev.soundEnabled,
         musicEnabled: d.musicEnabled !== undefined ? (d.musicEnabled as boolean) : prev.musicEnabled,
         activePuzzle: 'activePuzzle' in d ? (d.activePuzzle as GameState['activePuzzle']) : prev.activePuzzle,
-        isPaused: 'isPaused' in d ? (d.isPaused as boolean) : prev.isPaused
+        isPaused: 'isPaused' in d ? (d.isPaused as boolean) : prev.isPaused,
+        activeFragmentLore: 'activeFragmentLore' in d ? (d.activeFragmentLore as GameState['activeFragmentLore']) : prev.activeFragmentLore
       }));
     });
 
@@ -456,6 +457,15 @@ function App() {
     }
   };
 
+  // M2-R1: dismiss the knowledge fragment lore modal and resume gameplay.
+  const handleFragmentLoreDismiss = () => {
+    playUIButton();
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
+      scene?.dismissFragmentLore?.();
+    }
+  };
+
   const handleResumeClick = () => {
     playUIButton();
     if (gameRef.current) {
@@ -573,6 +583,7 @@ function App() {
             onResumeClick={handleResumeClick}
             onRestartStageClick={handleRestartStageClick}
             onReturnToMenuClick={handleReturnToMenuClick}
+            onFragmentLoreDismiss={handleFragmentLoreDismiss}
           />
           {gameState.stageResults && (
             <StageResultsUI

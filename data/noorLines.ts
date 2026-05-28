@@ -16,8 +16,8 @@
 export type NoorCue =
     | 'stage_2_enter'
     | 'low_hp_warning'
-    | 'combo_milestone_mid'
-    | 'combo_milestone_high';
+    | 'combo_milestone_high'
+    | 'rare_fragment_discovery';
 
 type NoorLine = { text: string; tone: 'encourage' | 'warning' | 'success' | 'greet' };
 
@@ -32,13 +32,14 @@ const LINES: Record<NoorCue, NoorLine[]> = {
         { text: 'تنفّس بهدوء، وركّز. نستطيع المتابعة.', tone: 'warning' },
         { text: 'حذارِ من العقبات القادمة!', tone: 'warning' },
     ],
-    combo_milestone_mid: [
-        { text: 'تركيزك يبني نوراً جديداً!', tone: 'encourage' },
-        { text: 'استمر… أنت في تدفقٍ رائع.', tone: 'encourage' },
-    ],
     combo_milestone_high: [
         { text: 'ما شاء الله! هذه قوة الإيقاع.', tone: 'success' },
         { text: 'سلسلة مذهلة! حافظ عليها.', tone: 'success' },
+    ],
+    rare_fragment_discovery: [
+        { text: 'رائع! اكتشفت كنزاً نادراً.', tone: 'success' },
+        { text: 'ما شاء الله، هذه قطعة معرفة ثمينة!', tone: 'success' },
+        { text: 'عينك حادة — هذا اكتشاف مميز.', tone: 'success' },
     ],
 };
 

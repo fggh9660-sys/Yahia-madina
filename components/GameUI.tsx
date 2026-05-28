@@ -14,9 +14,10 @@ interface GameUIProps {
   onResumeClick?: () => void;
   onRestartStageClick?: () => void;
   onReturnToMenuClick?: () => void;
+  onFragmentLoreDismiss?: () => void;
 }
 
-export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick }) => {
+export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick, onFragmentLoreDismiss }) => {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
 
@@ -206,6 +207,39 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                   </div>
               </div>
           </div>
+      )}
+
+      {/* M2-R1: KNOWLEDGE FRAGMENT LORE MODAL — full pause, dark/blur bg, centered card, tap ANYWHERE to continue */}
+      {gameState.activeFragmentLore && (
+        <div
+          className="absolute inset-0 z-[55] flex items-center justify-center bg-black/75 backdrop-blur-md p-6 cursor-pointer animate-in fade-in duration-300"
+          onClick={() => onFragmentLoreDismiss?.()}
+          role="button"
+          tabIndex={0}
+        >
+          <div
+            className="bg-gradient-to-b from-[#2a1d3a] to-[#1a1625] border-2 border-[#ffd700]/60 rounded-2xl p-7 md:p-9 max-w-md w-full shadow-[0_0_60px_rgba(255,215,0,0.25)] animate-in zoom-in-95 duration-300 text-center pointer-events-none"
+            dir="rtl"
+          >
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <span className="text-3xl">📖</span>
+              {gameState.activeFragmentLore.isRare && (
+                <span className="text-xs font-bold text-[#ffd700] bg-[#ffd700]/15 border border-[#ffd700]/40 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  اكتشاف نادر
+                </span>
+              )}
+            </div>
+            <h3 className="text-[#ffd66b] text-xl md:text-2xl font-black mb-3 leading-snug">
+              {gameState.activeFragmentLore.title}
+            </h3>
+            <p className="text-white/90 text-base md:text-lg leading-relaxed mb-6 font-medium">
+              {gameState.activeFragmentLore.body}
+            </p>
+            <div className="px-6 py-2.5 rounded-full bg-[#ffd700]/15 border border-[#ffd700]/50 text-[#ffd700] font-bold text-sm inline-block animate-pulse">
+              اضغط في أي مكان للمتابعة
+            </div>
+          </div>
+        </div>
       )}
 
       {/* PAUSE MENU */}

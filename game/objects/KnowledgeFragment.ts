@@ -15,10 +15,12 @@ export class KnowledgeFragment extends Phaser.Physics.Arcade.Sprite {
     declare destroy: (fromScene?: boolean) => void;
 
     public loreId: string | null = null;
+    public isRare: boolean = false;
 
-    constructor(scene: Phaser.Scene, x: number, y: number, loreId: string | null = null) {
+    constructor(scene: Phaser.Scene, x: number, y: number, loreId: string | null = null, isRare: boolean = false) {
         // store before super-side init so it survives texture-gen path
         const _loreId = loreId;
+        const _isRare = isRare;
         if (!scene.textures.exists('knowledge_fragment_tex')) {
             KnowledgeFragment.generateTexture(scene);
         }
@@ -27,6 +29,7 @@ export class KnowledgeFragment extends Phaser.Physics.Arcade.Sprite {
         scene.physics.add.existing(this);
 
         this.loreId = _loreId;
+        this.isRare = _isRare;
         this.setOrigin(0.5, 0.5).setDepth(6);
         const body = this.body as Phaser.Physics.Arcade.Body;
         body.setAllowGravity(false);

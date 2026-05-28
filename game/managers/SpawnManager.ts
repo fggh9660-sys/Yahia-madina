@@ -37,6 +37,7 @@ export class SpawnManager {
   private lastJumpArcTrailAt: number = 0;
   private lastTrackBonusAt: number = 0;
   private lastDiscoveryAt: number = 0;
+  private lastFragmentSpawnAt: number = 0;
   private readonly FALLING_DEBRIS_INTERVAL_M = 70;
   private readonly SPEED_BOOST_INTERVAL_M = 130;
   private readonly JUMP_ARC_TRAIL_INTERVAL_M = 100;
@@ -44,6 +45,9 @@ export class SpawnManager {
   // M2 discovery: rare hidden knowledge fragment at jump-arc peak — rewards exploration.
   private readonly DISCOVERY_INTERVAL_M = 320;
   private readonly DISCOVERY_INITIAL_OFFSET_M = 180;
+  // M2-R1c: regular fragment spawn at varied positions (air/platform/behind-obstacle/hidden) — bumped frequency.
+  private readonly FRAGMENT_INTERVAL_M = 140;
+  private readonly FRAGMENT_INITIAL_OFFSET_M = 90;
 
   private spawnTimer: number = 0;
   public nextSpawnTime: number = 100;
@@ -182,6 +186,13 @@ export class SpawnManager {
                 this.spawnDiscoveryFragment(this.scene.scale.width + 140, groundY);
             }
         }
+        // M2-R1c: regular knowledge fragment spawn with positional variety (air / platform / behind-obstacle / hidden).
+        // Higher frequency than discovery; not flagged isRare so no Noor line, just the lore modal.
+        if (runDistance > this.FRAGMENT_INITIAL_OFFSET_M
+            && runDistance - this.lastFragmentSpawnAt >= this.FRAGMENT_INTERVAL_M) {
+            this.lastFragmentSpawnAt = runDistance;
+            this.spawnRegularFragmentVariant(this.scene.scale.width + 120, groundY);
+        }
         // Track differentiation (branching paths v1.5): bias spawn pattern per active track.
         //   Track A = "challenge" → bonus obstacle clusters more often
         //   Track B = "collector" → bonus star trail more often
@@ -233,11 +244,46 @@ export class SpawnManager {
   }
 
   /** M2: drop a single knowledge fragment high above ground — visible from default running line
-   *  but only collectible if the player commits to a peak jump. Carries stage-themed lore. */
+   *  but only collectible if the player commits to a peak jump. Carries stage-themed lore.
+   *  Flagged isRare=true so pickup fires the Noor "rare discovery" line in addition to the lore modal. */
   private spawnDiscoveryFragment(startX: number, groundY: number) {
       const lore = pickLoreFragment(this.scene.getCurrentStage());
       const y = groundY - 160;
-      this.knowledgeFragments.add(new KnowledgeFragment(this.scene, startX, y, lore.id));
+      this.knowledgeFragments.add(new KnowledgeFragment(this.scene, startX, y, lore.id, true));
+  }
+
+  /**
+   * M2-R1c: regular (non-rare) knowledge fragment with positional variety. Rotates between
+   * 4 patterns so fragments don't always appear in the same spot:
+   *   - AIR     : mid-air at standard jump height (~110px above ground)
+   *   - PLATFORM: on a small floating platform anchor (~140px) — read as "on platform"
+   *   - BEHIND  : low after a small horizontal offset (~30px) — read as "behind obstacle"
+   *   - HIDDEN  : far-right edge of screen + slightly higher — easy to miss without attention
+   */
+  private spawnRegularFragmentVariant(startX: number, groundY: number) {
+      const lore = pickLoreFragment(this.scene.getCurrentStage());
+      const variants = ['AIR', 'PLATFORM', 'BEHIND', 'HIDDEN'] as const;
+      const pick = Phaser.Utils.Array.GetRandom(variants as unknown as string[]) as 'AIR' | 'PLATFORM' | 'BEHIND' | 'HIDDEN';
+      let x = startX;
+      let y = groundY - 110;
+      switch (pick) {
+          case 'AIR':
+              y = groundY - 110;
+              break;
+          case 'PLATFORM':
+              y = groundY - 140;
+              x = startX + 30;
+              break;
+          case 'BEHIND':
+              y = groundY - 50;
+              x = startX + 60;
+              break;
+          case 'HIDDEN':
+              y = groundY - 175;
+              x = startX + 90;
+              break;
+      }
+      this.knowledgeFragments.add(new KnowledgeFragment(this.scene, x, y, lore.id, false));
   }
 
   /** Spawn a parabolic arc of stars matching the optimal jump trajectory. Yahia readability
@@ -832,6 +878,7 @@ export class SpawnManager {
       this.lastTrackBonusAt = 0;
       this.lastSpeedBoostAt = 0;
       this.lastDiscoveryAt = 0;
+      this.lastFragmentSpawnAt = 0;
       this.spawnCount = 0;
       this.spawnQueue = [];
       this.lastSpawnType = 'NONE';

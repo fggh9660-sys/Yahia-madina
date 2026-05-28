@@ -60,6 +60,8 @@ export interface GameState {
   activePuzzle?: ActivePuzzle | null;
   /** True when the pause menu is open (Resume / Restart / Return to menu). */
   isPaused?: boolean;
+  /** M2-R1: full-screen lore modal triggered on knowledge fragment pickup. Tap anywhere → dismiss. */
+  activeFragmentLore?: { id: string; title: string; body: string; isRare?: boolean } | null;
 }
 
 export interface Question {
