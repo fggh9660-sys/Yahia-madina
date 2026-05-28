@@ -9,6 +9,7 @@ import { Obstacle, type ObstacleType } from '../objects/Obstacle';
 import { FallingDebris } from '../objects/FallingDebris';
 import { SpeedBoost } from '../objects/SpeedBoost';
 import { KnowledgeFragment } from '../objects/KnowledgeFragment';
+import { pickLoreFragment } from '../../data/loreFragments';
 import { MerchantCart } from '../objects/MerchantCart';
 import { StackOfRugs } from '../objects/StackOfRugs';
 import { MarketAwning } from '../objects/MarketAwning';
@@ -35,10 +36,14 @@ export class SpawnManager {
   private lastSpeedBoostAt: number = 0;
   private lastJumpArcTrailAt: number = 0;
   private lastTrackBonusAt: number = 0;
+  private lastDiscoveryAt: number = 0;
   private readonly FALLING_DEBRIS_INTERVAL_M = 70;
   private readonly SPEED_BOOST_INTERVAL_M = 130;
   private readonly JUMP_ARC_TRAIL_INTERVAL_M = 100;
   private readonly TRACK_BONUS_INTERVAL_M = 25;
+  // M2 discovery: rare hidden knowledge fragment at jump-arc peak — rewards exploration.
+  private readonly DISCOVERY_INTERVAL_M = 320;
+  private readonly DISCOVERY_INITIAL_OFFSET_M = 180;
 
   private spawnTimer: number = 0;
   public nextSpawnTime: number = 100;
@@ -169,6 +174,14 @@ export class SpawnManager {
                 this.spawnJumpArcTrail(this.scene.scale.width + 100, groundY);
             }
         }
+        // M2 discovery moment: rare hidden lore fragment at jump-arc peak height. Sparse + clear-only.
+        if (runDistance > this.DISCOVERY_INITIAL_OFFSET_M
+            && runDistance - this.lastDiscoveryAt >= this.DISCOVERY_INTERVAL_M) {
+            if (this.isCurrentlyClear()) {
+                this.lastDiscoveryAt = runDistance;
+                this.spawnDiscoveryFragment(this.scene.scale.width + 140, groundY);
+            }
+        }
         // Track differentiation (branching paths v1.5): bias spawn pattern per active track.
         //   Track A = "challenge" → bonus obstacle clusters more often
         //   Track B = "collector" → bonus star trail more often
@@ -217,6 +230,14 @@ export class SpawnManager {
           return true;
       });
       return clear;
+  }
+
+  /** M2: drop a single knowledge fragment high above ground — visible from default running line
+   *  but only collectible if the player commits to a peak jump. Carries stage-themed lore. */
+  private spawnDiscoveryFragment(startX: number, groundY: number) {
+      const lore = pickLoreFragment(this.scene.getCurrentStage());
+      const y = groundY - 160;
+      this.knowledgeFragments.add(new KnowledgeFragment(this.scene, startX, y, lore.id));
   }
 
   /** Spawn a parabolic arc of stars matching the optimal jump trajectory. Yahia readability
@@ -810,6 +831,7 @@ export class SpawnManager {
       this.lastFallingDebrisAt = 0;
       this.lastTrackBonusAt = 0;
       this.lastSpeedBoostAt = 0;
+      this.lastDiscoveryAt = 0;
       this.spawnCount = 0;
       this.spawnQueue = [];
       this.lastSpawnType = 'NONE';

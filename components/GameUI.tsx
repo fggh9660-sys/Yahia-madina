@@ -101,8 +101,9 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
   }, [gameState.stageTitle, stageTitleDisplay]);
 
   const handleOptionClick = (index: number) => {
-      if (showResult === 'correct' || !gameState.activeQuestion) return;
-      
+      // Guard against double-clicks after answer is locked in.
+      if (showResult || !gameState.activeQuestion) return;
+
       const isCorrect = index === gameState.activeQuestion.correctIndex;
       setSelectedOption(index);
 
@@ -112,12 +113,9 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
               if (onAnswer) onAnswer(true);
           }, 1000);
       } else {
+          // M2: wrong = encounter passes (slowdown penalty, no reward), gameplay continues.
           setShowResult('wrong');
           if (onAnswer) onAnswer(false);
-          setTimeout(() => {
-            setSelectedOption(null);
-            setShowResult(null);
-          }, 1000);
       }
   };
 
@@ -436,7 +434,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                                       <button
                                           key={idx}
                                           type="button"
-                                          disabled={showResult === 'correct'}
+                                          disabled={!!showResult}
                                           onClick={() => handleOptionClick(idx)}
                                           className={`relative px-4 py-2.5 md:py-3.5 rounded-xl text-base md:text-lg font-bold transition-all duration-200 w-full ${btnClass} shadow-md active:scale-[0.98] cursor-pointer touch-manipulation`}
                                       >
@@ -450,7 +448,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                           {/* Feedback Text */}
                           <div className="h-6 md:h-8 mt-2 md:mt-4 flex items-center justify-center">
                             {showResult === 'wrong' && (
-                                <span className="text-red-400 font-bold text-xs md:text-sm animate-pulse">حاول مرة أخرى!</span>
+                                <span className="text-red-400 font-bold text-xs md:text-sm animate-pulse">واصل التقدم...</span>
                             )}
                             {showResult === 'correct' && (
                                 <span className="text-green-400 font-bold text-xs md:text-sm">البوابة تفتح...</span>

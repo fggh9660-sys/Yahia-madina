@@ -11,6 +11,7 @@ import { MarketAwning } from '../objects/MarketAwning';
 import { MagicCarpet } from '../objects/MagicCarpet';
 import { KnowledgeFragment } from '../objects/KnowledgeFragment';
 import { KNOWLEDGE_FRAGMENT } from '../../constants';
+import { findLoreFragment } from '../../data/loreFragments';
 
 export class CollisionManager {
   private scene: MainScene;
@@ -156,6 +157,12 @@ export class CollisionManager {
       f.collect();
       this.scene.addScore(KNOWLEDGE_FRAGMENT.COLLECT_SCORE);
       this.scene.showFloatingText(f.x, f.y, `+معرفة 📖`, '#4dd0ff');
+
+      // M2: surface the lore note via Noor message so the pickup feels meaningful.
+      const lore = f.loreId ? findLoreFragment(f.loreId) : undefined;
+      if (lore) {
+          this.scene.showNoorMessage(`📖 ${lore.title}\n${lore.body}`, false, 'encourage');
+      }
       this.scene.audioManager?.playStarPitched(1200);
   }
 

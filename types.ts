@@ -68,6 +68,10 @@ export interface Question {
   options: string[];
   correctIndex: number;
   category?: 'math' | 'logic' | 'trivia' | 'science' | 'history' | 'geography' | 'language';
+  /** M2: stage tag. 1 = desert/heritage, 2 = city/knowledge, undefined = general fallback. */
+  stage?: 1 | 2;
+  /** M2: thematic group used for category-aware encounter framing. */
+  theme?: 'heritage' | 'knowledge' | 'general';
 }
 
 // Colors for the Arabic/Evening theme

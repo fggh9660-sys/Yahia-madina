@@ -1,11 +1,13 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, BRIDGE_WIND, BRIDGE_COLLAPSE, PATH_FORK, BALANCE_METER, SPEED_BOOST, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PROGRESS, SKILL, COMBO, PERFECT_JUMP, BOND_HUD, HITSTOP, SPEED_LINES, BRIDGE_WIND, BRIDGE_COLLAPSE, PATH_FORK, BALANCE_METER, SPEED_BOOST, QUESTION_ENCOUNTER, getPlayerStartX, getGameplayCameraZoom, getPlayerSpawnY } from '../../constants';
 import { NOOR_BOND_REWARDS, getBondTier, getBondTierDef, getNextTierThreshold, getCurrentTierFloor } from '../../data/noorBond';
 import { Player } from '../objects/Player';
 import { Obstacle } from '../objects/Obstacle';
 import { Question, GameState, NoorMessage, StageResultsData, ActivePuzzle, PuzzleType } from '../../types';
 import { getQuestions } from '../data/questions';
+import { pickLoreFragment } from '../../data/loreFragments';
+import { pickNoorLine } from '../../data/noorLines';
 
 // Objects for Texture Generation
 import { Star } from '../objects/Star';
@@ -25,6 +27,7 @@ import { SpawnManager } from '../managers/SpawnManager';
 import { EventManager } from '../managers/EventManager';
 import { CollisionManager } from '../managers/CollisionManager';
 import { AudioManager } from '../managers/AudioManager';
+import { MiniEncounterManager } from '../managers/MiniEncounterManager';
 
 export class MainScene extends Phaser.Scene {
   declare scale: Phaser.Scale.ScaleManager;
@@ -43,6 +46,7 @@ export class MainScene extends Phaser.Scene {
   public environmentManager!: EnvironmentManager;
   public spawnManager!: SpawnManager;
   public eventManager!: EventManager;
+  private miniEncounterManager!: MiniEncounterManager;
   public collisionManager!: CollisionManager;
   public nurController!: NurController;
   public audioManager!: AudioManager;
@@ -175,6 +179,11 @@ export class MainScene extends Phaser.Scene {
     this.eventManager = new EventManager(this);
     this.collisionManager = new CollisionManager(this);
     this.nurController = new NurController(this);
+    this.miniEncounterManager = new MiniEncounterManager(
+        this,
+        () => this.currentStage,
+        () => this.eventManager.isEncounterActive || this.eventManager.eventPhase !== 'NONE',
+    );
 
     // 2. Generate Assets (core gameplay textures – already prewarmed in HomeScene, so this is cheap)
     Player.generateTexture(this);
@@ -440,7 +449,7 @@ export class MainScene extends Phaser.Scene {
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
-    this.questionPool = getQuestions();
+    this.questionPool = getQuestions(this.currentStage);
     
     this.guideFlags = { welcome: false, firstJump: false, firstGate: false };
     this.firstObstacleRef = null;
@@ -503,6 +512,7 @@ export class MainScene extends Phaser.Scene {
     this.player.update(time, scaledDelta);
     this.spawnManager.update(scaledDelta, frameMove, currentSpeed);
     this.eventManager.update(frameMove, scaledDelta);
+    this.miniEncounterManager?.update();
     this.eventManager.handleEncounterPause(this.player.x);
 
     this.updateBridgeBanners(frameMove, scaledDelta);
@@ -531,7 +541,14 @@ export class MainScene extends Phaser.Scene {
   // ... (Rest of the file remains same, keeping methods to ensure full file content logic) ...
   public advanceStage() {
       this.currentStage++;
-      this.baseSpeed = PHYSICS.RUN_SPEED + ((this.currentStage - 1) * 20); 
+      this.baseSpeed = PHYSICS.RUN_SPEED + ((this.currentStage - 1) * 20);
+      // M2: refresh question pool with stage-themed set (heritage→knowledge on Stage 2).
+      this.questionPool = getQuestions(this.currentStage);
+      // M2: contextual Noor line on stage transition.
+      if (this.currentStage === 2) {
+          const line = pickNoorLine('stage_2_enter');
+          if (line) this.showNoorMessage(line.text, false, line.tone);
+      }
   }
 
   private createSandstormOverlay() {
@@ -916,10 +933,11 @@ export class MainScene extends Phaser.Scene {
           const y = groundY - 70 - 35 * Math.sin(t * Math.PI);
           this.spawnManager?.stars.add(new Star(this, x, y));
       }
-      // One knowledge fragment at a jumpable height
+      // One knowledge fragment at a jumpable height, carrying a stage-appropriate lore note.
       const fragX = baseX + (PATH_FORK.KNOWLEDGE_EXTRA_STAR_COUNT + 1) * 48;
       const fragY = groundY - 120;
-      this.spawnManager?.knowledgeFragments.add(new KnowledgeFragment(this, fragX, fragY));
+      const lore = pickLoreFragment(this.currentStage);
+      this.spawnManager?.knowledgeFragments.add(new KnowledgeFragment(this, fragX, fragY, lore.id));
   }
 
   /** Split Path 2-second countdown timer — circle UI + hold-key hints + slow-motion. */
@@ -1108,6 +1126,12 @@ export class MainScene extends Phaser.Scene {
       if (tierChanged && this.comboTier > prevTier) {
           this.addBondPoints(NOOR_BOND_REWARDS.COMBO_TIER_UP);
           this.hitStop(HITSTOP.TIER_UP_MS, HITSTOP.TIER_UP_SCALE);
+          // M2: contextual Noor line on combo tier milestones (mid at tier 2, high at tier 3+).
+          const cue = this.comboTier >= 3 ? 'combo_milestone_high' : (this.comboTier === 2 ? 'combo_milestone_mid' : null);
+          if (cue) {
+              const line = pickNoorLine(cue);
+              if (line) this.showNoorMessage(line.text, false, line.tone);
+          }
       }
   }
 
@@ -1720,7 +1744,7 @@ export class MainScene extends Phaser.Scene {
 
   /**
    * Skill depth — Sub-slice 4: Noor bond meter.
-   * Accumulates points across the run. Damage does NOT decrement (progression only goes up
+   * Accumulates points across the run. Damage does NOT decrement (progression only goes up     
    * per the design spec). Crossing a tier threshold fires onBondTierUp which currently just
    * surfaces a notification; slice 5 will wire cosmetics, passives, and Nur dialogue.
    */
@@ -1860,7 +1884,13 @@ export class MainScene extends Phaser.Scene {
       }
       this.audioManager?.playDamage();
       this.hearts--;
-      if (this.hearts <= 0) this.gameOver();
+      if (this.hearts <= 0) {
+          this.gameOver();
+      } else if (this.hearts === 1) {
+          // M2: low HP warning Noor line — only fires when dropping TO 1, not at 0 (game over).
+          const line = pickNoorLine('low_hp_warning');
+          if (line) this.showNoorMessage(line.text, false, line.tone);
+      }
   }
 
   public showFloatingText(x: number, y: number, text: string, color: string = '#ffd700') {
@@ -1915,7 +1945,7 @@ export class MainScene extends Phaser.Scene {
           question = allQuestions.find(q => q.id === specificId);
       }
       if (!question) {
-          if (this.questionPool.length === 0) this.questionPool = getQuestions();
+          if (this.questionPool.length === 0) this.questionPool = getQuestions(this.currentStage);
           question = this.questionPool.pop();
       }
       if (question) {
@@ -1937,21 +1967,101 @@ export class MainScene extends Phaser.Scene {
 
           if (this.eventManager.encounterType === 'GATE' && this.eventManager.currentGate) {
               this.eventManager.currentGate.open();
+              this.spawnCorrectAnswerBonusStars();
               this.handlePostAnswerDelay(false);
           } else if (this.eventManager.encounterType === 'CHEST' && this.eventManager.currentChest) {
               this.eventManager.currentChest.open(() => {
-                  const reward = Phaser.Math.Between(5, 20);
+                  const reward = Phaser.Math.Between(QUESTION_ENCOUNTER.CORRECT_REWARD_MIN, QUESTION_ENCOUNTER.CORRECT_REWARD_MAX);
                   this.addScore(reward);
                   this.showFloatingText(this.player.x, this.player.y - 100, `+${reward} نجمة!`, '#ffd700');
+                  this.spawnCorrectAnswerBonusStars();
                   this.handlePostAnswerDelay(false);
               });
           }
       } else {
+          // M2: wrong answer is NO LONGER a blocking gate.
+          // Light slowdown penalty + dismiss encounter + resume gameplay.
           this.audioManager?.playDamage();
           this.cameras.main.shake(180, 0.014);
-          this.showNoorMessage('حاول مرة أخرى.', false, 'warning');
           this.wrongAnswersCount++;
+          this.triggerEncounterMiss();
+      }
+  }
+
+  /** M2: wrong-answer flow. Dismiss encounter visually, apply slowdown, resume gameplay — no damage, no progression block. */
+  private triggerEncounterMiss(): void {
+      this.eventManager.isEncounterOpening = true;
+      this.showNoorMessage('ربما المرة القادمة! واصل التقدم.', false, 'warning');
+
+      // Dim the encounter object so player visibly passes by an inert chest/gate.
+      if (this.eventManager.encounterType === 'CHEST' && this.eventManager.currentChest) {
+          this.eventManager.currentChest.dim(
+              QUESTION_ENCOUNTER.WRONG_DIM_DURATION_MS,
+              QUESTION_ENCOUNTER.WRONG_DIM_TINT,
+              QUESTION_ENCOUNTER.WRONG_DIM_ALPHA
+          );
+      } else if (this.eventManager.encounterType === 'GATE' && this.eventManager.currentGate) {
+          this.eventManager.currentGate.dim(
+              QUESTION_ENCOUNTER.WRONG_DIM_DURATION_MS,
+              QUESTION_ENCOUNTER.WRONG_DIM_ALPHA
+          );
+      }
+
+      // Hold the question UI briefly so the player registers the red feedback before it dismisses.
+      this.time.delayedCall(QUESTION_ENCOUNTER.WRONG_FEEDBACK_HOLD_MS, () => {
+          this.activeQuestion = null;
+          if (this.physics.world.isPaused) this.physics.resume();
+          this.player.anims.resume();
+
+          // Light slowdown penalty (not a stop); tween down then back up after the penalty window.
+          this.tweens.add({
+              targets: this,
+              speedModifier: QUESTION_ENCOUNTER.WRONG_SLOWDOWN_MULTIPLIER,
+              duration: 200,
+              ease: 'Sine.out',
+              onComplete: () => {
+                  this.time.delayedCall(QUESTION_ENCOUNTER.WRONG_SLOWDOWN_DURATION_MS, () => {
+                      this.tweens.add({
+                          targets: this,
+                          speedModifier: 1.0,
+                          duration: QUESTION_ENCOUNTER.WRONG_RECOVERY_DURATION_MS,
+                          ease: 'Sine.inOut'
+                      });
+                  });
+              }
+          });
+
           this.syncUI();
+          this.cleanupEncounterAfterMiss();
+      });
+  }
+
+  /** M2: encounter object + state cleanup after a wrong answer. Owns its own speed/physics flow (unlike correct path). */
+  private cleanupEncounterAfterMiss(): void {
+      this.time.delayedCall(3000, () => {
+          this.eventManager.isEncounterActive = false;
+          this.eventManager.encounterType = 'NONE';
+          this.eventManager.eventPhase = 'NONE';
+
+          if (this.eventManager.currentGate) { this.eventManager.currentGate.destroy(); this.eventManager.currentGate = null; }
+          if (this.eventManager.currentChest) { this.eventManager.currentChest.destroy(); this.eventManager.currentChest = null; }
+      });
+  }
+
+  /** M2: small cluster of physical stars in a parabolic arc after correct answer — visible reward beyond the score. */
+  private spawnCorrectAnswerBonusStars(): void {
+      const baseX = this.scale.width + 80;
+      const groundY = getPlayerSpawnY(this.scale.height) + 39;
+      const count = QUESTION_ENCOUNTER.CORRECT_BONUS_STAR_COUNT;
+      const gap = QUESTION_ENCOUNTER.CORRECT_BONUS_STAR_GAP_PX;
+      const peak = QUESTION_ENCOUNTER.CORRECT_BONUS_STAR_ARC_PEAK;
+      for (let i = 0; i < count; i++) {
+          const t = i / Math.max(1, count - 1);
+          const arc = Math.sin(t * Math.PI) * peak;
+          const x = baseX + i * gap;
+          const y = groundY - 60 - arc;
+          const star = new Star(this, x, y);
+          this.spawnManager.stars.add(star);
       }
   }
 

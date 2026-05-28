@@ -190,6 +190,32 @@ export class MagicGate extends Phaser.GameObjects.Container {
       this.add(this.lightOrbsEmitter);
   }
 
+  /** Fizzle on wrong answer: dim the portal so player passes through without reward. */
+  public dim(durationMs: number = 400, targetAlpha: number = 0.4) {
+      if (this.isActivated) return;
+      this.scene.tweens.killTweensOf(this.nebula);
+      this.scene.tweens.killTweensOf(this.vortex);
+      this.scene.tweens.killTweensOf(this.vortexCore);
+      this.scene.tweens.killTweensOf(this.godRays);
+
+      if (this.suctionEmitter) this.suctionEmitter.stop();
+      if (this.lightOrbsEmitter) this.lightOrbsEmitter.stop();
+
+      [this.nebula, this.vortex, this.vortexCore, this.godRays, this.outerArch].forEach(spr => {
+          if (spr) {
+              this.scene.tweens.add({
+                  targets: spr,
+                  alpha: targetAlpha,
+                  duration: durationMs,
+                  ease: 'Sine.out'
+              });
+              if ('setTint' in spr && typeof spr.setTint === 'function') {
+                  spr.setTint(0x555555);
+              }
+          }
+      });
+  }
+
   public open() {
       if (this.isActivated) return;
       this.isActivated = true;

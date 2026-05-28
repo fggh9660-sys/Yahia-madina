@@ -2,9 +2,9 @@ import Phaser from 'phaser';
 import { KNOWLEDGE_FRAGMENT } from '../../constants';
 
 /**
- * Knowledge Fragment collectible — spawns on the Knowledge path of the Split Path event.
- * Visual: a small glowing book icon. On collect: bonus score + floating label.
- * Content (lore tied to bond meter) is left as placeholder for Yahia to fill.
+ * Knowledge Fragment collectible — spawns on the Knowledge path of the Split Path event
+ * and (M2) at scattered discovery points across stages. Carries a loreId pointing into
+ * data/loreFragments.ts so pickup can surface a Noor message with the actual lore note.
  */
 export class KnowledgeFragment extends Phaser.Physics.Arcade.Sprite {
     declare body: Phaser.Physics.Arcade.Body;
@@ -14,7 +14,11 @@ export class KnowledgeFragment extends Phaser.Physics.Arcade.Sprite {
     declare setOrigin: (x?: number, y?: number) => this;
     declare destroy: (fromScene?: boolean) => void;
 
-    constructor(scene: Phaser.Scene, x: number, y: number) {
+    public loreId: string | null = null;
+
+    constructor(scene: Phaser.Scene, x: number, y: number, loreId: string | null = null) {
+        // store before super-side init so it survives texture-gen path
+        const _loreId = loreId;
         if (!scene.textures.exists('knowledge_fragment_tex')) {
             KnowledgeFragment.generateTexture(scene);
         }
@@ -22,6 +26,7 @@ export class KnowledgeFragment extends Phaser.Physics.Arcade.Sprite {
         scene.add.existing(this);
         scene.physics.add.existing(this);
 
+        this.loreId = _loreId;
         this.setOrigin(0.5, 0.5).setDepth(6);
         const body = this.body as Phaser.Physics.Arcade.Body;
         body.setAllowGravity(false);

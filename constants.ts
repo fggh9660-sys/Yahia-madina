@@ -348,3 +348,28 @@ export const PROGRESS = {
   STAGE_2_LENGTH_M: 600,
   DISTANCE_SCALE: 0.0137,
 };
+
+// M2: Question = encounter OPENER (not progression gate).
+// Correct = encounter opens + bigger reward. Wrong = light slowdown penalty + encounter passes (no reward, no damage).
+export const QUESTION_ENCOUNTER = {
+  // Wrong answer: light penalty + encounter dismissed
+  WRONG_SLOWDOWN_MULTIPLIER: 0.55,
+  WRONG_SLOWDOWN_DURATION_MS: 1200,
+  WRONG_RECOVERY_DURATION_MS: 700,
+  WRONG_FEEDBACK_HOLD_MS: 900, // hold popup briefly so player sees red feedback
+
+  // Wrong: visual fizzle on encounter object (chest/gate)
+  WRONG_DIM_TINT: 0x555555,
+  WRONG_DIM_ALPHA: 0.4,
+  WRONG_DIM_DURATION_MS: 400,
+
+  // Correct answer: bigger reward (was 5-20, now wider + bonus star arc)
+  CORRECT_REWARD_MIN: 15,
+  CORRECT_REWARD_MAX: 35,
+  CORRECT_BONUS_STAR_COUNT: 4,
+  CORRECT_BONUS_STAR_GAP_PX: 56,
+  CORRECT_BONUS_STAR_ARC_PEAK: 80,
+
+  // Post-answer encounter cleanup window (existing behavior, exposed for tuning)
+  POST_ANSWER_RESUME_DELAY_MS: 600,
+};
