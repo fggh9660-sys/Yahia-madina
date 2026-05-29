@@ -20,6 +20,17 @@ export interface LoreFragment {
 
 export const LORE_FRAGMENTS: LoreFragment[] = [
     // ─────────────────────────────────────────────────────────────
+    // LOST BOOK INTRO — Yahia 2026-05-29
+    // First fragment the player ever encounters in a run. Seeds the long-term mystery
+    // of the City of Knowledge. Special: not in any stage pool, spawn-first-override only.
+    // ─────────────────────────────────────────────────────────────
+    {
+        id: 'lost-book-intro',
+        title: 'الكتاب المفقود',
+        body: 'يُقال إن صفحات هذا الكتاب تحوي أسراراً لا يكشفها إلا من يجمعها كلها.',
+    },
+
+    // ─────────────────────────────────────────────────────────────
     // STAGE 1 — Desert / Heritage
     // ─────────────────────────────────────────────────────────────
     {
@@ -92,15 +103,25 @@ const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
 
 /**
  * Pick one lore fragment matching the given stage. Falls back to any fragment if the stage pool is empty.
+ * The Lost Book intro is excluded from random pools — it spawns only via the dedicated first-spawn override.
  */
 export const pickLoreFragment = (stage?: number): LoreFragment => {
+    const exclude = (f: LoreFragment) => f.id !== 'lost-book-intro';
     const stageMatches = stage === 1 || stage === 2
-        ? LORE_FRAGMENTS.filter(f => f.stage === stage)
+        ? LORE_FRAGMENTS.filter(f => f.stage === stage && exclude(f))
         : [];
-    const pool = stageMatches.length > 0 ? stageMatches : LORE_FRAGMENTS;
+    const fallback = LORE_FRAGMENTS.filter(f => f.stage === undefined && exclude(f));
+    const pool = stageMatches.length > 0 ? stageMatches : (fallback.length > 0 ? fallback : LORE_FRAGMENTS.filter(exclude));
     return shuffle(pool)[0];
 };
 
 /** Lookup by id for save-system / discovery moments. */
 export const findLoreFragment = (id: string): LoreFragment | undefined =>
     LORE_FRAGMENTS.find(f => f.id === id);
+
+/** Lost Book intro — first fragment override. Always returns the same entry. */
+export const getLostBookIntro = (): LoreFragment => {
+    const intro = LORE_FRAGMENTS.find(f => f.id === 'lost-book-intro');
+    if (!intro) throw new Error('lost-book-intro lore entry missing from LORE_FRAGMENTS');
+    return intro;
+};

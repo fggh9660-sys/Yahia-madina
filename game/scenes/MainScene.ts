@@ -1910,8 +1910,11 @@ export class MainScene extends Phaser.Scene {
       this.player.anims.pause();
       if (this.physics.world.isPaused === false) this.physics.pause();
       // M2-R1b: only rare/discovery fragments trigger a Noor line — keeps Noor reserved.
+      // M2-R2a: the Lost Book intro is a special once-per-run hook — uses its own narration cue
+      // instead of the generic rare_fragment_discovery pool.
       if (isRare) {
-          const line = pickNoorLine('rare_fragment_discovery');
+          const cue = lore.id === 'lost-book-intro' ? 'lost_book_intro' : 'rare_fragment_discovery';
+          const line = pickNoorLine(cue);
           if (line) this.showNoorMessage(line.text, false, line.tone);
       }
       this.syncUI();

@@ -9,7 +9,7 @@ import { Obstacle, type ObstacleType } from '../objects/Obstacle';
 import { FallingDebris } from '../objects/FallingDebris';
 import { SpeedBoost } from '../objects/SpeedBoost';
 import { KnowledgeFragment } from '../objects/KnowledgeFragment';
-import { pickLoreFragment } from '../../data/loreFragments';
+import { pickLoreFragment, getLostBookIntro } from '../../data/loreFragments';
 import { MerchantCart } from '../objects/MerchantCart';
 import { StackOfRugs } from '../objects/StackOfRugs';
 import { MarketAwning } from '../objects/MarketAwning';
@@ -38,16 +38,19 @@ export class SpawnManager {
   private lastTrackBonusAt: number = 0;
   private lastDiscoveryAt: number = 0;
   private lastFragmentSpawnAt: number = 0;
+  // M2-R2a: Lost Book intro override — first fragment ever spawned in a run is the Lost Book.
+  private hasSpawnedLostBookIntro: boolean = false;
   private readonly FALLING_DEBRIS_INTERVAL_M = 70;
   private readonly SPEED_BOOST_INTERVAL_M = 130;
   private readonly JUMP_ARC_TRAIL_INTERVAL_M = 100;
   private readonly TRACK_BONUS_INTERVAL_M = 25;
-  // M2 discovery: rare hidden knowledge fragment at jump-arc peak — rewards exploration.
-  private readonly DISCOVERY_INTERVAL_M = 320;
-  private readonly DISCOVERY_INITIAL_OFFSET_M = 180;
-  // M2-R1c: regular fragment spawn at varied positions (air/platform/behind-obstacle/hidden) — bumped frequency.
-  private readonly FRAGMENT_INTERVAL_M = 140;
-  private readonly FRAGMENT_INITIAL_OFFSET_M = 90;
+  // M2-R2 tuned spawn pacing — denser than original baseline (140/320) for visibility during Yahia review,
+  // but not aggressive enough to break flow. Yahia note 3: "more frequent + discovery opportunities".
+  // ~7 fragments per Stage 1 (~600m) at this rate, with 3 rare discoveries.
+  private readonly DISCOVERY_INTERVAL_M = 200;
+  private readonly DISCOVERY_INITIAL_OFFSET_M = 120;
+  private readonly FRAGMENT_INTERVAL_M = 80;
+  private readonly FRAGMENT_INITIAL_OFFSET_M = 60;
 
   private spawnTimer: number = 0;
   public nextSpawnTime: number = 100;
@@ -259,8 +262,18 @@ export class SpawnManager {
    *   - PLATFORM: on a small floating platform anchor (~140px) — read as "on platform"
    *   - BEHIND  : low after a small horizontal offset (~30px) — read as "behind obstacle"
    *   - HIDDEN  : far-right edge of screen + slightly higher — easy to miss without attention
+   *
+   * M2-R2a: the very first fragment spawn in a run is overridden to the Lost Book intro
+   * (rare-flagged so it triggers the Noor narration). After that, normal variety resumes.
    */
   private spawnRegularFragmentVariant(startX: number, groundY: number) {
+      if (!this.hasSpawnedLostBookIntro) {
+          this.hasSpawnedLostBookIntro = true;
+          const intro = getLostBookIntro();
+          // Place at a clearly visible mid-air position the player will run into naturally.
+          this.knowledgeFragments.add(new KnowledgeFragment(this.scene, startX, groundY - 110, intro.id, true));
+          return;
+      }
       const lore = pickLoreFragment(this.scene.getCurrentStage());
       const variants = ['AIR', 'PLATFORM', 'BEHIND', 'HIDDEN'] as const;
       const pick = Phaser.Utils.Array.GetRandom(variants as unknown as string[]) as 'AIR' | 'PLATFORM' | 'BEHIND' | 'HIDDEN';
@@ -879,6 +892,7 @@ export class SpawnManager {
       this.lastSpeedBoostAt = 0;
       this.lastDiscoveryAt = 0;
       this.lastFragmentSpawnAt = 0;
+      this.hasSpawnedLostBookIntro = false;
       this.spawnCount = 0;
       this.spawnQueue = [];
       this.lastSpawnType = 'NONE';

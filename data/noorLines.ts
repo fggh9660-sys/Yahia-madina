@@ -17,7 +17,8 @@ export type NoorCue =
     | 'stage_2_enter'
     | 'low_hp_warning'
     | 'combo_milestone_high'
-    | 'rare_fragment_discovery';
+    | 'rare_fragment_discovery'
+    | 'lost_book_intro';
 
 type NoorLine = { text: string; tone: 'encourage' | 'warning' | 'success' | 'greet' };
 
@@ -40,6 +41,9 @@ const LINES: Record<NoorCue, NoorLine[]> = {
         { text: 'رائع! اكتشفت كنزاً نادراً.', tone: 'success' },
         { text: 'ما شاء الله، هذه قطعة معرفة ثمينة!', tone: 'success' },
         { text: 'عينك حادة — هذا اكتشاف مميز.', tone: 'success' },
+    ],
+    lost_book_intro: [
+        { text: 'هناك كتاب مفقود في مكان ما من مدينة العلم… لكن صفحاته تناثرت في أنحاء العالم.', tone: 'greet' },
     ],
 };
 
