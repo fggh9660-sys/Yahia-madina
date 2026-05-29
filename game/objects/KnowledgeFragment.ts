@@ -53,17 +53,58 @@ export class KnowledgeFragment extends Phaser.Physics.Arcade.Sprite {
             repeat: -1,
             ease: 'Sine.easeInOut',
         });
+
+        // M2-R2b: rare fragments get a visible aura halo + brighter pulse so they read as special
+        // even before pickup. Lost Book intro and discovery-spawn fragments are both isRare=true.
+        if (this.isRare) {
+            this.rareAura = scene.add.circle(x, y, 28, 0xffd66b, 0.28)
+                .setDepth(5)
+                .setBlendMode(Phaser.BlendModes.ADD);
+            scene.tweens.add({
+                targets: this.rareAura,
+                scale: { from: 1, to: 1.45 },
+                alpha: { from: 0.28, to: 0.55 },
+                duration: 900,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.inOut',
+            });
+            // Brighter intrinsic tint pulse on the fragment itself
+            this.setTint(0xfff0c2);
+        }
     }
+
+    private rareAura: Phaser.GameObjects.Arc | null = null;
 
     public update(frameMove: number) {
         if (!this.active) return;
         this.x -= frameMove;
-        if (this.x < -50) this.destroy();
+        if (this.rareAura) {
+            this.rareAura.x = this.x;
+            this.rareAura.y = this.y;
+        }
+        if (this.x < -50) {
+            this.rareAura?.destroy();
+            this.rareAura = null;
+            this.destroy();
+        }
     }
 
     public collect() {
         this.scene.tweens.killTweensOf(this);
+        if (this.rareAura) this.scene.tweens.killTweensOf(this.rareAura);
         if (this.body) (this.body as Phaser.Physics.Arcade.Body).enable = false;
+        // Fade the aura out alongside the fragment.
+        if (this.rareAura) {
+            this.scene.tweens.add({
+                targets: this.rareAura,
+                alpha: 0,
+                scale: 2,
+                duration: 360,
+                ease: 'Cubic.out',
+                onComplete: () => { this.rareAura?.destroy(); this.rareAura = null; },
+            });
+        }
         this.scene.tweens.add({
             targets: this,
             scale: { from: 1, to: 1.5 },

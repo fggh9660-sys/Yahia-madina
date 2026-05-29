@@ -538,9 +538,13 @@ export class MainScene extends Phaser.Scene {
     }
     
     // --- BOUNDS CHECK ---
-    // If Flying, bounds are different
-    if (!this.player.isFlying && this.player.y > this.scale.height + 50) {
-        this.damagePlayer(true); 
+    // If Flying, bounds are different. M2-R2b fix: also skip the fall-fatality during stage-end
+    // transitions so the player doesn't die between desert end and city start while React UI is up.
+    if (!this.player.isFlying
+        && this.player.y > this.scale.height + 50
+        && !this.stageResults
+        && !this.pendingTransition) {
+        this.damagePlayer(true);
     }
   }
 
@@ -1879,6 +1883,11 @@ export class MainScene extends Phaser.Scene {
       if (this.eventManager.eventPhase === 'NUR_INTRO') return;
       if (this.eventManager.eventPhase === 'STAGE_2_INTRO') return;
       if (this.eventManager.eventPhase.startsWith('LEVEL')) return;
+      // M2-R2b fix: stage-end transition is also a no-damage window. Player may be off-screen below
+      // because physics keep running while the React StageResultsUI is up. Without this guard, the
+      // fall-fatality at bounds check kills the player right at the end of the desert level.
+      if (this.stageResults) return;
+      if (this.pendingTransition) return;
 
       // Combo chain: actual damage breaks the chain (shield blocks do not — those are filtered upstream).
       this.resetCombo();
