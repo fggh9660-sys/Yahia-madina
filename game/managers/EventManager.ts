@@ -2,8 +2,9 @@
 import Phaser from 'phaser';
 import { PROGRESS, BRIDGE_WIND, BRIDGE_COLLAPSE, PATH_FORK, PHYSICS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
 import { BridgeTile } from '../objects/BridgeTile';
-import { PathFork } from '../objects/PathFork';
-import { PathLaneTile } from '../objects/PathLaneTile';
+// M2-R3 (Yahia 2026-05-31): Split Path system removed entirely. PathFork + PathLaneTile classes
+// kept on disk in case Choose-Your-Path mini-challenge in M3a wants reference assets, but no longer
+// imported. The redesigned Choose-Your-Path will be built fresh as mini-challenge #6.
 import { Star } from '../objects/Star';
 import { MainScene } from '../scenes/MainScene';
 import { MagicGate } from '../objects/MagicGate';
@@ -117,16 +118,10 @@ export class EventManager {
   public bridgeCheckpoints: Phaser.GameObjects.Sprite[] = [];
 
   // Branching paths / Split Path Event (Wk 1 Day 5 → polished per Yahia 2026-05-23 ref)
-  public pathForks: PathFork[] = [];
+  // M2-R3: split path state retained as stubs only — activeTrack kept so SpawnManager's
+  // track-bonus block compiles, but it's always 'NONE' now.
   public activeTrack: 'NONE' | 'A' | 'B' = 'NONE';
-  private trackActiveUntilMs: number = 0;
-  public splitPathTriggered: boolean = false;
-  public pathForkCountdownStarted: boolean = false;
-  public pathForkCountdownEndsAt: number = 0;
-  // Two-lane rendering (Yahia 2026-05-24 follow-up)
-  public pathLaneTiles: PathLaneTile[] = [];
-  private upperLaneSpawnX: number = 0;
-  private upperLaneActive: boolean = false;
+  // M2-R3: pathFork countdown, lane tiles, upper-lane state all removed with Split Path system.
 
   // Puzzle sequences (storm: 3–5 puzzles; library: 3–5 puzzles)
   private stormPuzzleQueue: ActivePuzzle[] = [];
@@ -146,9 +141,7 @@ export class EventManager {
       this.checkBridgeWindExit();
       this.checkBridgeCollapseExit();
       this.updateBridgeTiles(frameMove);
-      this.maybeSpawnPathFork();
-      this.updatePathForks(frameMove);
-      this.updateUpperLane(frameMove);
+      // M2-R3: Split Path system removed — no fork spawn, no fork update, no upper lane.
       if (this.currentGate) {
           if (this.currentGate.active) this.currentGate.update(frameMove);
           else this.currentGate = null;
@@ -1074,123 +1067,13 @@ export class EventManager {
    * fully completes. Spawns the fork marker, fires Noor dialogue, starts a 2-second
    * countdown window for the player to choose Knowledge (left) or Speed (right).
    */
-  public maybeSpawnPathFork() {
-      if (this.splitPathTriggered) return;
-      if (this.eventPhase !== 'NONE') return;
-      if (!this.bridgeCollapseTriggered) return; // gate behind bridge completion
-      const env = this.scene.environmentManager;
-      if (env.getZone() !== 'CITY') return;
-      const dist = this.scene.getRunDistance();
-      const bridgeEndDistance = this.bridgeCollapseStartDistance + BRIDGE_COLLAPSE.PHASE_LENGTH_M;
-      if (dist < bridgeEndDistance + PATH_FORK.TRIGGER_AFTER_BRIDGE_BUFFER_M) return;
-      this.splitPathTriggered = true;
-      const groundY = getGroundY(this.scene.scale.height);
-      const fork = new PathFork(this.scene, this.scene.scale.width + 100, groundY);
-      this.pathForks.push(fork);
-      this.scene.showNoorMessage(PATH_FORK.KNOWLEDGE_NOOR_MSG, false, 'think');
-      this.pathForkCountdownStarted = true;
-      this.pathForkCountdownEndsAt = this.scene.time.now + PATH_FORK.COUNTDOWN_MS;
-      this.scene.onSplitPathCountdownStart?.(PATH_FORK.COUNTDOWN_MS);
-  }
-
-  /** Called each frame from MainScene — scrolls forks + resolves input window crossings. */
-  public updatePathForks(frameMove: number) {
-      const playerX = this.scene.player?.x ?? 0;
-      const leftHeld = !!(this.scene.player as unknown as { isHoldingLeft?: boolean })?.isHoldingLeft
-          || !!this.scene.input.keyboard?.checkDown(this.scene.input.keyboard.addKey('A'), 0)
-          || !!this.scene.input.keyboard?.checkDown(this.scene.input.keyboard.addKey('LEFT'), 0);
-      const rightHeld = !!(this.scene.player as unknown as { isHoldingRight?: boolean })?.isHoldingRight
-          || !!this.scene.input.keyboard?.checkDown(this.scene.input.keyboard.addKey('D'), 0)
-          || !!this.scene.input.keyboard?.checkDown(this.scene.input.keyboard.addKey('RIGHT'), 0);
-
-      for (let i = this.pathForks.length - 1; i >= 0; i--) {
-          const fork = this.pathForks[i];
-          if (!fork.active) {
-              this.pathForks.splice(i, 1);
-              continue;
-          }
-          fork.update(frameMove);
-          if (fork.canResolveAt(playerX)) {
-              const side = leftHeld && !rightHeld ? 'A' : rightHeld && !leftHeld ? 'B' : 'NONE';
-              fork.resolve(side);
-              if (side !== 'NONE') {
-                  this.activeTrack = side;
-                  this.trackActiveUntilMs = this.scene.time.now + PATH_FORK.ACTIVE_DURATION_MS;
-                  this.scene.onPathChosen?.(side);
-              }
-          }
-      }
-      // Expire active track
-      if (this.activeTrack !== 'NONE' && this.scene.time.now >= this.trackActiveUntilMs) {
-          const prev = this.activeTrack;
-          this.activeTrack = 'NONE';
-          this.scene.onPathChosen?.('NONE');
-          // Stop upper lane spawn — existing tiles scroll off naturally, player walks off + falls
-          if (prev === 'A') this.stopUpperLane();
-      }
-  }
-
-  /** Reset path fork state — called on scene restart. */
+  // M2-R3 (Yahia 2026-05-31): Split Path system removed entirely. All maybeSpawnPathFork,
+  // updatePathForks, resetPathForks, startUpperLane, stopUpperLane, updateUpperLane methods
+  // deleted. Reintroduce as a clean "Choose Your Path" mini-challenge in M3a, not a parallel-track
+  // architecture layered onto the runner.
   public resetPathForks() {
-      for (const f of this.pathForks) if (f.active) f.destroy();
-      this.pathForks = [];
+      // Stub kept so MainScene.initializeState can still call it without import errors.
       this.activeTrack = 'NONE';
-      this.trackActiveUntilMs = 0;
-      this.splitPathTriggered = false;
-      this.pathForkCountdownStarted = false;
-      this.pathForkCountdownEndsAt = 0;
-      this.stopUpperLane();
-  }
-
-  /** Start upper-lane platform tile spawning — called when player commits Knowledge path. */
-  public startUpperLane() {
-      if (this.upperLaneActive) return;
-      this.upperLaneActive = true;
-      const groundY = getGroundY(this.scene.scale.height);
-      const upperY = groundY - PATH_FORK.UPPER_LANE_Y_OFFSET;
-      const playerX = this.scene.player?.x ?? getPlayerStartX(this.scene.scale.width);
-      // Pre-fill tiles from a bit before player to past right edge
-      const startTileX = playerX - PATH_FORK.LANE_TILE_WIDTH * 2;
-      const endTileX = this.scene.scale.width + 400;
-      const count = Math.ceil((endTileX - startTileX) / PATH_FORK.LANE_TILE_WIDTH);
-      for (let i = 0; i < count; i++) {
-          const t = new PathLaneTile(this.scene, startTileX + i * PATH_FORK.LANE_TILE_WIDTH, upperY);
-          this.pathLaneTiles.push(t);
-      }
-      this.upperLaneSpawnX = startTileX + count * PATH_FORK.LANE_TILE_WIDTH;
-      // Wire collision with player so they can stand on the lane
-      this.scene.physics.add.collider(this.scene.player, this.pathLaneTiles);
-  }
-
-  /** Stop spawning new upper-lane tiles. Existing tiles scroll off naturally. */
-  public stopUpperLane() {
-      this.upperLaneActive = false;
-      // Don't destroy existing tiles — let them scroll off so player can run off the end naturally
-  }
-
-  /** Continuous tile generation + scroll + cleanup, called each frame. */
-  public updateUpperLane(frameMove: number) {
-      // Scroll + cull existing tiles
-      for (let i = this.pathLaneTiles.length - 1; i >= 0; i--) {
-          const t = this.pathLaneTiles[i];
-          if (!t.active) {
-              this.pathLaneTiles.splice(i, 1);
-              continue;
-          }
-          t.scrollWith(frameMove);
-      }
-      // Spawn new tiles only while lane is active
-      if (this.upperLaneActive) {
-          this.upperLaneSpawnX -= frameMove;
-          if (this.upperLaneSpawnX < this.scene.scale.width + 200) {
-              const groundY = getGroundY(this.scene.scale.height);
-              const upperY = groundY - PATH_FORK.UPPER_LANE_Y_OFFSET;
-              const t = new PathLaneTile(this.scene, this.scene.scale.width + 220, upperY);
-              this.pathLaneTiles.push(t);
-              this.scene.physics.add.collider(this.scene.player, t);
-              this.upperLaneSpawnX = this.scene.scale.width + 220 + PATH_FORK.LANE_TILE_WIDTH;
-          }
-      }
   }
 
   /** Reset all collapsing-bridge state (called on scene restart or fall-to-city-entrance reset). */
@@ -1395,7 +1278,9 @@ export class EventManager {
       if (this.libraryPuzzleQueue.length > 0 && this.libraryPuzzleSequenceActive) {
           this.libraryPuzzleIndex++;
           if (this.libraryPuzzleIndex < this.libraryPuzzleQueue.length) {
-              this.scene.time.delayedCall(600, () => {
+              // M2-R3 library pacing fix (Yahia 2026-05-31): bumped 600ms → 1800ms so puzzles
+              // feel paced with breathing room instead of whipping by.
+              this.scene.time.delayedCall(1800, () => {
                   this.scene.showPuzzle(this.libraryPuzzleQueue[this.libraryPuzzleIndex]);
               });
           } else {

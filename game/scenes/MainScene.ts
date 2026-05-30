@@ -94,12 +94,7 @@ export class MainScene extends Phaser.Scene {
   private edgeTimeMs: number = 0;
   private pathHudBg: Phaser.GameObjects.Graphics | null = null;
   private pathHudLabel: Phaser.GameObjects.Text | null = null;
-  private splitPathCountdownGfx: Phaser.GameObjects.Graphics | null = null;
-  private splitPathCountdownLabel: Phaser.GameObjects.Text | null = null;
-  private splitPathCountdownEndMs: number = 0;
-  private splitPathHintLeft: Phaser.GameObjects.Text | null = null;
-  private splitPathHintRight: Phaser.GameObjects.Text | null = null;
-  private splitPathPrevSpeed: number = 1;
+  // M2-R3: split path UI state removed alongside the system.
   private bridgeAmbientDebrisEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
   // UI State
@@ -444,12 +439,7 @@ export class MainScene extends Phaser.Scene {
     this.pathHudBg = null;
     this.pathHudLabel = null;
     this.bridgeAmbientDebrisEmitter = null;
-    this.splitPathCountdownGfx = null;
-    this.splitPathCountdownLabel = null;
-    this.splitPathCountdownEndMs = 0;
-    this.splitPathHintLeft = null;
-    this.splitPathHintRight = null;
-    this.splitPathPrevSpeed = 1;
+    // M2-R3: splitPath* UI nullifications removed alongside the system.
     this.baseSpeed = PHYSICS.RUN_SPEED_START ?? PHYSICS.RUN_SPEED;
     this.speedModifier = 1.0; 
     this.physics.world.timeScale = 1.0; 
@@ -477,6 +467,9 @@ export class MainScene extends Phaser.Scene {
     if (this.isGameOver) return;
     if (this.activeMessage || this.activeQuestion) return;
     if (this.isPausedMenu) return;
+    // M2-R3: full pause when lore card open — skip the entire update so bg/spawn/event/ambient
+    // managers don't run. Combined with tweens.pauseAll() in showFragmentLore, the world freezes.
+    if (this.activeFragmentLore) return;
 
     // When storm is active, keep all obstacles/collectibles cleared so player cannot lose to obstacles
     const phase = this.eventManager.eventPhase;
@@ -862,207 +855,10 @@ export class MainScene extends Phaser.Scene {
       this.bridgeAmbientDebrisEmitter.frequency = earlyMs + (lateMs - earlyMs) * p;
   }
 
-  public onPathChosen(side: 'A' | 'B' | 'NONE') {
-      // Stop countdown timer regardless of choice
-      this.stopSplitPathCountdown();
-      if (side === 'NONE') {
-          if (this.pathHudBg) this.pathHudBg.setVisible(false);
-          if (this.pathHudLabel) this.pathHudLabel.setVisible(false);
-          return;
-      }
-      this.audioManager?.playStarPitched(side === 'A' ? 400 : 200);
-      this.cameras.main.shake(80, 0.003);
-      const labelAr = side === 'A' ? PATH_FORK.KNOWLEDGE_LABEL_AR : PATH_FORK.SPEED_LABEL_AR;
-      this.showFloatingText(this.player.x, this.player.y - 90, side === 'A' ? `${labelAr} 📚` : `${labelAr} ⚡`, side === 'A' ? '#4dd0ff' : '#ffaa00');
-
-      // Trigger path-specific rewards + visible lane shift
-      if (side === 'A') {
-          // Path of Knowledge — auto-tween player up to upper lane + spawn upper platform tiles
-          this.addScore(PATH_FORK.KNOWLEDGE_BONUS_SCORE);
-          this.spawnKnowledgePathRewards();
-          this.eventManager.startUpperLane();
-          const targetY = getPlayerSpawnY(this.scale.height) - PATH_FORK.UPPER_LANE_Y_OFFSET;
-          const body = this.player.body as Phaser.Physics.Arcade.Body;
-          body.setAllowGravity(false);
-          body.setVelocity(0, 0);
-          this.tweens.add({
-              targets: this.player,
-              y: targetY,
-              duration: PATH_FORK.PLAYER_LANE_TWEEN_MS,
-              ease: 'Sine.easeOut',
-              onComplete: () => {
-                  body.setAllowGravity(true);
-              },
-          });
-      } else {
-          // Path of Speed — auto speed boost + score (player stays on lower lane)
-          this.addScore(PATH_FORK.SPEED_BONUS_SCORE);
-          this.triggerSpeedBoost();
-      }
-
-      const W = this.scale.width;
-      const cx = W / 2;
-      const cy = PATH_FORK.HUD_Y_FROM_TOP;
-
-      if (!this.pathHudBg) {
-          this.pathHudBg = this.add.graphics().setDepth(498).setScrollFactor(0);
-      }
-      if (!this.pathHudLabel) {
-          this.pathHudLabel = this.add.text(cx, cy, '', {
-              fontFamily: 'Cairo', fontSize: '14px', fontStyle: 'bold',
-              color: '#ffffff', stroke: '#000', strokeThickness: 2,
-          }).setOrigin(0.5, 0.5).setDepth(499).setScrollFactor(0);
-      }
-      const color = side === 'A' ? PATH_FORK.ARROW_COLOR_LEFT : PATH_FORK.ARROW_COLOR_RIGHT;
-      this.pathHudBg.clear();
-      this.pathHudBg.fillStyle(PATH_FORK.HUD_BG_COLOR, PATH_FORK.HUD_BG_ALPHA);
-      this.pathHudBg.fillRoundedRect(cx - PATH_FORK.HUD_W / 2, cy - PATH_FORK.HUD_H / 2, PATH_FORK.HUD_W, PATH_FORK.HUD_H, 8);
-      this.pathHudBg.lineStyle(2, color, 0.9);
-      this.pathHudBg.strokeRoundedRect(cx - PATH_FORK.HUD_W / 2, cy - PATH_FORK.HUD_H / 2, PATH_FORK.HUD_W, PATH_FORK.HUD_H, 8);
-      this.pathHudBg.setVisible(true);
-      this.pathHudLabel.setText(side === 'A' ? `طريق ${PATH_FORK.KNOWLEDGE_LABEL_AR} 📚` : `طريق ${PATH_FORK.SPEED_LABEL_AR} ⚡`);
-      this.pathHudLabel.setColor(`#${color.toString(16).padStart(6, '0')}`);
-      this.pathHudLabel.setVisible(true);
-
-      // Auto-hide after track duration
-      this.time.delayedCall(PATH_FORK.ACTIVE_DURATION_MS + 200, () => {
-          if (this.eventManager?.activeTrack === 'NONE') {
-              this.pathHudBg?.setVisible(false);
-              this.pathHudLabel?.setVisible(false);
-          }
-      });
-  }
-
-  private spawnKnowledgePathRewards() {
-      const W = this.scale.width;
-      const groundY = getPlayerSpawnY(this.scale.height) + 39;
-      const baseX = W + 100;
-      // Bonus star cluster in arc
-      for (let i = 0; i < PATH_FORK.KNOWLEDGE_EXTRA_STAR_COUNT; i++) {
-          const t = i / Math.max(1, PATH_FORK.KNOWLEDGE_EXTRA_STAR_COUNT - 1);
-          const x = baseX + i * 48;
-          const y = groundY - 70 - 35 * Math.sin(t * Math.PI);
-          this.spawnManager?.stars.add(new Star(this, x, y));
-      }
-      // One knowledge fragment at a jumpable height, carrying a stage-appropriate lore note.
-      const fragX = baseX + (PATH_FORK.KNOWLEDGE_EXTRA_STAR_COUNT + 1) * 48;
-      const fragY = groundY - 120;
-      const lore = pickLoreFragment(this.currentStage);
-      this.spawnManager?.knowledgeFragments.add(new KnowledgeFragment(this, fragX, fragY, lore.id));
-  }
-
-  /** Split Path 2-second countdown timer — circle UI + hold-key hints + slow-motion. */
-  public onSplitPathCountdownStart(durationMs: number) {
-      const W = this.scale.width;
-      const cx = W / 2;
-      const cy = PATH_FORK.COUNTDOWN_Y_FROM_TOP;
-      if (!this.splitPathCountdownGfx) {
-          this.splitPathCountdownGfx = this.add.graphics().setDepth(498).setScrollFactor(0);
-      }
-      if (!this.splitPathCountdownLabel) {
-          this.splitPathCountdownLabel = this.add.text(cx, cy, '', {
-              fontFamily: 'Cairo', fontSize: '24px', fontStyle: 'bold',
-              color: '#ffd700', stroke: '#000', strokeThickness: 3,
-          }).setOrigin(0.5, 0.5).setDepth(499).setScrollFactor(0);
-      }
-      this.splitPathCountdownGfx.setVisible(true);
-      this.splitPathCountdownLabel.setVisible(true);
-      this.splitPathCountdownEndMs = this.time.now + durationMs;
-
-      // Slow time during countdown for a cinematic decision moment
-      this.splitPathPrevSpeed = this.getGameSpeed();
-      this.setGameSpeed(this.splitPathPrevSpeed * PATH_FORK.COUNTDOWN_SLOWMO_SCALE);
-
-      // Hold-key hints — large color-coded labels on either side of the countdown
-      const hintY = PATH_FORK.HINT_Y_FROM_TOP;
-      if (!this.splitPathHintLeft) {
-          this.splitPathHintLeft = this.add.text(cx - PATH_FORK.HINT_GAP_PX, hintY, '', {
-              fontFamily: 'Cairo', fontSize: `${PATH_FORK.HINT_FONT_SIZE}px`, fontStyle: 'bold',
-              color: `#${PATH_FORK.ARROW_COLOR_LEFT.toString(16).padStart(6, '0')}`,
-              stroke: '#000', strokeThickness: 3,
-          }).setOrigin(0.5, 0.5).setDepth(499).setScrollFactor(0);
-      }
-      if (!this.splitPathHintRight) {
-          this.splitPathHintRight = this.add.text(cx + PATH_FORK.HINT_GAP_PX, hintY, '', {
-              fontFamily: 'Cairo', fontSize: `${PATH_FORK.HINT_FONT_SIZE}px`, fontStyle: 'bold',
-              color: `#${PATH_FORK.ARROW_COLOR_RIGHT.toString(16).padStart(6, '0')}`,
-              stroke: '#000', strokeThickness: 3,
-          }).setOrigin(0.5, 0.5).setDepth(499).setScrollFactor(0);
-      }
-      this.splitPathHintLeft.setText('A 📚 العلم').setVisible(true).setAlpha(0);
-      this.splitPathHintRight.setText('D ⚡ السرعة').setVisible(true).setAlpha(0);
-      this.tweens.add({ targets: [this.splitPathHintLeft, this.splitPathHintRight], alpha: 1, duration: 220 });
-      // Subtle pulse to draw the eye
-      this.tweens.add({
-          targets: [this.splitPathHintLeft, this.splitPathHintRight],
-          scale: { from: 1, to: 1.1 },
-          duration: 480,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.easeInOut',
-      });
-  }
-
-  public stopSplitPathCountdown() {
-      this.splitPathCountdownEndMs = 0;
-      this.splitPathCountdownGfx?.clear();
-      this.splitPathCountdownGfx?.setVisible(false);
-      this.splitPathCountdownLabel?.setVisible(false);
-      // Restore game speed
-      if (this.splitPathPrevSpeed && this.getGameSpeed() < this.splitPathPrevSpeed) {
-          this.setGameSpeed(this.splitPathPrevSpeed);
-      }
-      // Hide hint labels
-      if (this.splitPathHintLeft) {
-          this.tweens.killTweensOf(this.splitPathHintLeft);
-          this.splitPathHintLeft.setScale(1);
-          this.tweens.add({
-              targets: this.splitPathHintLeft,
-              alpha: 0,
-              duration: 220,
-              onComplete: () => this.splitPathHintLeft?.setVisible(false),
-          });
-      }
-      if (this.splitPathHintRight) {
-          this.tweens.killTweensOf(this.splitPathHintRight);
-          this.splitPathHintRight.setScale(1);
-          this.tweens.add({
-              targets: this.splitPathHintRight,
-              alpha: 0,
-              duration: 220,
-              onComplete: () => this.splitPathHintRight?.setVisible(false),
-          });
-      }
-  }
-
-  private updateSplitPathCountdown() {
-      if (!this.splitPathCountdownEndMs) return;
-      const remaining = this.splitPathCountdownEndMs - this.time.now;
-      if (remaining <= 0) {
-          this.stopSplitPathCountdown();
-          return;
-      }
-      const total = PATH_FORK.COUNTDOWN_MS;
-      const ratio = Math.max(0, Math.min(1, remaining / total));
-      if (!this.splitPathCountdownGfx || !this.splitPathCountdownLabel) return;
-      const W = this.scale.width;
-      const cx = W / 2;
-      const cy = PATH_FORK.COUNTDOWN_Y_FROM_TOP;
-      const r = PATH_FORK.COUNTDOWN_RADIUS;
-      this.splitPathCountdownGfx.clear();
-      // BG circle
-      this.splitPathCountdownGfx.fillStyle(PATH_FORK.COUNTDOWN_BG_COLOR, 0.7);
-      this.splitPathCountdownGfx.fillCircle(cx, cy, r);
-      // Ring (arc) representing time remaining
-      this.splitPathCountdownGfx.lineStyle(4, PATH_FORK.COUNTDOWN_RING_COLOR, 1);
-      const startAngle = -Math.PI / 2;
-      const endAngle = startAngle + Math.PI * 2 * ratio;
-      this.splitPathCountdownGfx.beginPath();
-      this.splitPathCountdownGfx.arc(cx, cy, r, startAngle, endAngle, false);
-      this.splitPathCountdownGfx.strokePath();
-      // Seconds label
-      this.splitPathCountdownLabel.setText(Math.ceil(remaining / 1000).toString());
-  }
+  // M2-R3 (Yahia 2026-05-31): Split Path system removed entirely.
+  // Old methods deleted: onPathChosen, spawnKnowledgePathRewards, onSplitPathCountdownStart,
+  // stopSplitPathCountdown, updateSplitPathCountdown. Will be rebuilt fresh as "Choose Your Path"
+  // mini-challenge #6 in M3a, not as a parallel-track layered onto the runner.
 
   public triggerSpeedBoost() {
       if (this.isGameOver || this.isPausedMenu) return;
@@ -1511,7 +1307,7 @@ export class MainScene extends Phaser.Scene {
 
   private updateBridgeBanners(frameMove: number, delta: number) {
       this.updateBridgeAmbientDebris();
-      this.updateSplitPathCountdown();
+      // M2-R3: updateSplitPathCountdown removed alongside Split Path system.
       // Bridge collapse fall detection — if player is grounded over a collapsed tile, fail.
       if (this.eventManager?.eventPhase === 'BRIDGE_COLLAPSE' && !this.eventManager.bridgeFell) {
           const body = this.player?.body as Phaser.Physics.Arcade.Body | undefined;
@@ -1918,6 +1714,10 @@ export class MainScene extends Phaser.Scene {
       this.speedModifier = 0;
       this.player.anims.pause();
       if (this.physics.world.isPaused === false) this.physics.pause();
+      // M2-R3: pause ALL active tweens so mid-flight ambients (mini encounters, lantern processions,
+      // parallax tween chains, sandstorm overlay, fragment bob/scale) freeze too. The update() early-return
+      // already skips manager updates; this catches everything already in flight.
+      this.tweens.pauseAll();
       // M2-R1b: only rare/discovery fragments trigger a Noor line — keeps Noor reserved.
       // M2-R2a: the Lost Book intro is a special once-per-run hook — uses its own narration cue
       // instead of the generic rare_fragment_discovery pool.
@@ -1936,6 +1736,8 @@ export class MainScene extends Phaser.Scene {
       if (this.physics.world.isPaused) this.physics.resume();
       this.player.anims.resume();
       this.speedModifier = 1.0;
+      // M2-R3: resume all paused tweens so ambients + animations continue from where they were frozen.
+      this.tweens.resumeAll();
       this.syncUI();
   }
 

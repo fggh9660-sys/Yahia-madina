@@ -157,7 +157,7 @@ export class MagicGate extends Phaser.GameObjects.Container {
 
   private createParticles() {
       if (!this.scene.textures.exists('star_collectible')) return;
-      this.suctionEmitter = this.scene.add.particles(0, -250, 'star_collectible', {
+      this.suctionEmitter = this.scene.add.particles(0, -250, 'star_collectible', { 
           scale: { start: 0.4, end: 0 },
           alpha: { start: 0, end: 1, ease: 'Sine.easeIn' },
           lifespan: 1000,

@@ -46,12 +46,14 @@ export class EnvironmentManager {
     this.checkZoneProgression();
   }
 
-  /** Distance in meters into city before library – longer so player spends more time in city (tunable) */
-  private readonly LIBRARY_TRIGGER_DISTANCE = 520;
+  /** Distance in meters into city before library – longer so player spends more time in city (tunable)
+   *  M2-R3 (Yahia 2026-05-31): pulled from 520 → 450 so library segment has 150m of run instead of
+   *  80m before stage end. Combined with slower puzzle pacing this lets the library breathe. */
+  private readonly LIBRARY_TRIGGER_DISTANCE = 450;
   /** Distance bands inside Stage 2 (city) to drive visual progression. */
-  private readonly CITY_ENTRANCE_MAX = 180;  // Just inside the gate
-  private readonly CITY_STREET_MAX = 350;   // Simple streets
-  private readonly CITY_MARKET_MAX = 520;   // Market / dense core (Bayt after this)
+  private readonly CITY_ENTRANCE_MAX = 160;  // Just inside the gate
+  private readonly CITY_STREET_MAX = 300;   // Simple streets
+  private readonly CITY_MARKET_MAX = 450;   // Market / dense core (Bayt after this) — matches LIBRARY_TRIGGER_DISTANCE
 
   private checkZoneProgression() {
       if (this.currentZone === 'CITY') {

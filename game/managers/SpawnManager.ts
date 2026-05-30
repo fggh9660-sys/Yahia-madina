@@ -196,25 +196,7 @@ export class SpawnManager {
             this.lastFragmentSpawnAt = runDistance;
             this.spawnRegularFragmentVariant(this.scene.scale.width + 120, groundY);
         }
-        // Track differentiation (branching paths v1.5): bias spawn pattern per active track.
-        //   Track A = "challenge" → bonus obstacle clusters more often
-        //   Track B = "collector" → bonus star trail more often
-        const track = evt.activeTrack;
-        if (track !== 'NONE' && runDistance - this.lastTrackBonusAt >= this.TRACK_BONUS_INTERVAL_M) {
-            this.lastTrackBonusAt = runDistance;
-            if (track === 'B') {
-                // Reward cluster — 3 stars at jump-arc height
-                for (let i = 0; i < 3; i++) {
-                    const sx = this.scene.scale.width + 100 + i * 48;
-                    const sy = groundY - 90 - 30 * Math.sin((i / 2) * Math.PI);
-                    this.stars.add(new Star(this.scene, sx, sy));
-                }
-            } else if (track === 'A') {
-                // Bonus obstacle — extra rock at ground level
-                const obstacleType = inCity ? 'rock_city' : 'rock';
-                this.obstacles.add(new Obstacle(this.scene, this.scene.scale.width + 120, groundY, obstacleType as ObstacleType));
-            }
-        }
+        // M2-R3 (Yahia 2026-05-31): track differentiation block removed alongside Split Path system.
     }
 
     // Desert (INTRO_RUN): show obstacles, stars, boxes etc. from the very start of the run
@@ -256,12 +238,11 @@ export class SpawnManager {
   }
 
   /**
-   * M2-R1c: regular (non-rare) knowledge fragment with positional variety. Rotates between
-   * 4 patterns so fragments don't always appear in the same spot:
+   * M2-R1c: regular (non-rare) knowledge fragment with positional variety.
+   * M2-R3 (Yahia 2026-05-31): dropped BEHIND + HIDDEN variants — they made fragments too easy to
+   * miss / appear too close to obstacles. Kept the two visible patterns:
    *   - AIR     : mid-air at standard jump height (~110px above ground)
-   *   - PLATFORM: on a small floating platform anchor (~140px) — read as "on platform"
-   *   - BEHIND  : low after a small horizontal offset (~30px) — read as "behind obstacle"
-   *   - HIDDEN  : far-right edge of screen + slightly higher — easy to miss without attention
+   *   - PLATFORM: slightly higher on a small offset (~140px) — read as "on platform"
    *
    * M2-R2a: the very first fragment spawn in a run is overridden to the Lost Book intro
    * (rare-flagged so it triggers the Noor narration). After that, normal variety resumes.
@@ -275,26 +256,13 @@ export class SpawnManager {
           return;
       }
       const lore = pickLoreFragment(this.scene.getCurrentStage());
-      const variants = ['AIR', 'PLATFORM', 'BEHIND', 'HIDDEN'] as const;
-      const pick = Phaser.Utils.Array.GetRandom(variants as unknown as string[]) as 'AIR' | 'PLATFORM' | 'BEHIND' | 'HIDDEN';
+      const variants = ['AIR', 'PLATFORM'] as const;
+      const pick = Phaser.Utils.Array.GetRandom(variants as unknown as string[]) as 'AIR' | 'PLATFORM';
       let x = startX;
       let y = groundY - 110;
-      switch (pick) {
-          case 'AIR':
-              y = groundY - 110;
-              break;
-          case 'PLATFORM':
-              y = groundY - 140;
-              x = startX + 30;
-              break;
-          case 'BEHIND':
-              y = groundY - 50;
-              x = startX + 60;
-              break;
-          case 'HIDDEN':
-              y = groundY - 175;
-              x = startX + 90;
-              break;
+      if (pick === 'PLATFORM') {
+          y = groundY - 140;
+          x = startX + 30;
       }
       this.knowledgeFragments.add(new KnowledgeFragment(this.scene, x, y, lore.id, false));
   }
