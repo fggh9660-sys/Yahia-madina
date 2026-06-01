@@ -62,6 +62,10 @@ export interface GameState {
   isPaused?: boolean;
   /** M2-R1: full-screen lore modal triggered on knowledge fragment pickup. Tap anywhere → dismiss. */
   activeFragmentLore?: { id: string; title: string; body: string; isRare?: boolean } | null;
+  /** M3A: mini-challenge modal triggered by encounter (replaces old activeQuestion popup flow). */
+  activeMiniChallenge?: import('./game/data/miniChallenges').MiniChallenge | null;
+  /** M3A: live collection progress — shown in HUD + collection screen. */
+  collection?: { collected: number; total: number; percent: number };
 }
 
 export interface Question {

@@ -10,6 +10,9 @@ import { AgeSelectionUI } from './components/AgeSelectionUI';
 import { GameState, AgeGroup } from './types';
 import { MainScene } from './game/scenes/MainScene';
 import { HomeScene } from './game/scenes/HomeScene';
+import { PlayerColorPicker } from './components/PlayerColorPicker';
+import { hasPlayerPickedColor } from './data/playerColor';
+import { Player } from './game/objects/Player';
 
 type GameStatus = 'intro_gate' | 'home' | 'how_to_play' | 'age_select' | 'game_details' | 'loading_play' | 'playing';
 
@@ -23,6 +26,27 @@ function App() {
   
   // Game Flow: intro_gate -> home -> how_to_play -> age_select -> game_details -> playing
   const [gameStatus, setGameStatus] = useState<GameStatus>('intro_gate');
+
+  // M3A: first-run player color picker — shown once before first game start.
+  const [showColorPicker, setShowColorPicker] = useState<boolean>(false);
+  const [showColorPickerInPause, setShowColorPickerInPause] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Trigger first-time color picker on initial home view.
+    if (gameStatus === 'home' && !hasPlayerPickedColor()) {
+      setShowColorPicker(true);
+    }
+  }, [gameStatus]);
+
+  const handleColorPicked = () => {
+    setShowColorPicker(false);
+    setShowColorPickerInPause(false);
+    // Regenerate player texture so the next game start uses the new scarf color.
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene | undefined;
+      if (scene) Player.regenerateTexture(scene);
+    }
+  };
 
   // iOS Safari workaround: after orientationchange the viewport sometimes settles only
   // a few hundred ms later, leaving Phaser with a stale canvas size. Force a refresh.
@@ -96,7 +120,9 @@ function App() {
         musicEnabled: d.musicEnabled !== undefined ? (d.musicEnabled as boolean) : prev.musicEnabled,
         activePuzzle: 'activePuzzle' in d ? (d.activePuzzle as GameState['activePuzzle']) : prev.activePuzzle,
         isPaused: 'isPaused' in d ? (d.isPaused as boolean) : prev.isPaused,
-        activeFragmentLore: 'activeFragmentLore' in d ? (d.activeFragmentLore as GameState['activeFragmentLore']) : prev.activeFragmentLore
+        activeFragmentLore: 'activeFragmentLore' in d ? (d.activeFragmentLore as GameState['activeFragmentLore']) : prev.activeFragmentLore,
+        activeMiniChallenge: 'activeMiniChallenge' in d ? (d.activeMiniChallenge as GameState['activeMiniChallenge']) : prev.activeMiniChallenge,
+        collection: 'collection' in d ? (d.collection as GameState['collection']) : prev.collection
       }));
     });
 
@@ -466,6 +492,22 @@ function App() {
     }
   };
 
+  // M3A: Book of Noor open/close — pause/resume gameplay so player can read safely.
+  const handleBookOfNoorOpen = () => {
+    playUIButton();
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
+      scene?.pauseForBookOfNoor?.();
+    }
+  };
+  const handleBookOfNoorClose = () => {
+    playUIButton();
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
+      scene?.resumeFromBookOfNoor?.();
+    }
+  };
+
   const handleResumeClick = () => {
     playUIButton();
     if (gameRef.current) {
@@ -584,6 +626,8 @@ function App() {
             onRestartStageClick={handleRestartStageClick}
             onReturnToMenuClick={handleReturnToMenuClick}
             onFragmentLoreDismiss={handleFragmentLoreDismiss}
+            onBookOfNoorOpen={handleBookOfNoorOpen}
+            onBookOfNoorClose={handleBookOfNoorClose}
           />
           {gameState.stageResults && (
             <StageResultsUI
@@ -591,7 +635,15 @@ function App() {
               onContinue={handleStageResultsContinue}
             />
           )}
+          {showColorPickerInPause && (
+            <PlayerColorPicker onPick={handleColorPicked} onClose={() => setShowColorPickerInPause(false)} />
+          )}
         </>
+      )}
+
+      {/* M3A: first-time player color picker — overlays any screen until user picks. */}
+      {showColorPicker && (
+        <PlayerColorPicker fullscreen onPick={handleColorPicked} />
       )}
 
       {/* Loading State */}

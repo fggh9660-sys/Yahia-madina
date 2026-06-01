@@ -12,6 +12,7 @@ import { MagicCarpet } from '../objects/MagicCarpet';
 import { KnowledgeFragment } from '../objects/KnowledgeFragment';
 import { KNOWLEDGE_FRAGMENT } from '../../constants';
 import { findLoreFragment } from '../../data/loreFragments';
+import { addToCollection, consumeNewMilestone, getCollectedCount, getTotalPossible } from '../../data/collectionState';
 
 export class CollisionManager {
   private scene: MainScene;
@@ -166,6 +167,17 @@ export class CollisionManager {
       const lore = f.loreId ? findLoreFragment(f.loreId) : undefined;
       if (lore) {
           this.scene.showFragmentLore({ id: lore.id, title: lore.title, body: lore.body }, f.isRare);
+      }
+
+      // M3A: track persistent collection + fire milestone reward if a threshold is crossed.
+      if (lore && addToCollection(lore.id)) {
+          this.scene.onCollectionProgress?.(getCollectedCount(), getTotalPossible());
+          const milestone = consumeNewMilestone();
+          if (milestone) {
+              this.scene.addScore(milestone.stars);
+              this.scene.showFloatingText(this.scene.player.x, this.scene.player.y - 130, `🎉 ${milestone.label}`, '#ffd700');
+              this.scene.audioManager?.playStarPitched(1500);
+          }
       }
   }
 

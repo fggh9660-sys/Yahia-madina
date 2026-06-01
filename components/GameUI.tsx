@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState } from '../types';
+import { MiniChallengeModal } from './MiniChallengeModal';
+import { BookOfNoorModal } from './BookOfNoorModal';
 
 interface GameUIProps {
   gameState: GameState;
@@ -15,11 +17,14 @@ interface GameUIProps {
   onRestartStageClick?: () => void;
   onReturnToMenuClick?: () => void;
   onFragmentLoreDismiss?: () => void;
+  onBookOfNoorOpen?: () => void;
+  onBookOfNoorClose?: () => void;
 }
 
-export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick, onFragmentLoreDismiss }) => {
+export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick, onFragmentLoreDismiss, onBookOfNoorOpen, onBookOfNoorClose }) => {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
+  const [showBookOfNoor, setShowBookOfNoor] = useState(false);
 
   // Step 2: smooth distance display (lerp toward game state)
   const [displayDistance, setDisplayDistance] = useState(0);
@@ -209,6 +214,24 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
           </div>
       )}
 
+      {/* M3A: MINI-CHALLENGE MODAL — replaces legacy question popup */}
+      {gameState.activeMiniChallenge && (
+          <MiniChallengeModal
+              challenge={gameState.activeMiniChallenge}
+              onAnswer={(isCorrect) => onAnswer?.(isCorrect)}
+          />
+      )}
+
+      {/* M3A: BOOK OF NOOR collection screen — opened from HUD chip click */}
+      {showBookOfNoor && (
+          <BookOfNoorModal
+              onClose={() => {
+                  setShowBookOfNoor(false);
+                  onBookOfNoorClose?.();
+              }}
+          />
+      )}
+
       {/* M2-R1: KNOWLEDGE FRAGMENT LORE MODAL — full pause, dark/blur bg, centered card, tap ANYWHERE to continue */}
       {gameState.activeFragmentLore && (
         <div
@@ -358,6 +381,30 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                   </span>
                 </div>
               </div>
+              {/* M3A: live collection progress chip — click to open Book of Noor (collection screen). */}
+              {gameState.collection && gameState.collection.total > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBookOfNoor(true);
+                    onBookOfNoorOpen?.();
+                  }}
+                  className="pointer-events-auto bg-black/40 hover:bg-black/60 backdrop-blur-md px-2 py-1 md:px-3 md:py-2 rounded-lg md:rounded-xl border border-[#4dd0ff]/30 hover:border-[#4dd0ff]/60 shadow-lg cursor-pointer touch-manipulation transition-colors"
+                  aria-label="افتح كتاب نور"
+                >
+                  <div className="flex items-center gap-1.5 leading-tight">
+                    <span className="text-base md:text-xl">📖</span>
+                    <div className="flex flex-col items-start leading-tight">
+                      <span className="text-white text-xs md:text-base font-black font-mono">
+                        {gameState.collection.collected}<span className="text-white/40">/{gameState.collection.total}</span>
+                      </span>
+                      <span className="text-[#4dd0ff] text-[7px] md:text-[10px] font-bold tracking-wider">
+                        {gameState.collection.percent}%
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              )}
               <div className="flex items-center gap-1 md:gap-2 flex-row-reverse">
                 {gameState.hearts <= 3 ? (
                   Array.from({ length: 3 }).map((_, i) => (

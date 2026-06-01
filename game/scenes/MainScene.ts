@@ -8,6 +8,8 @@ import { Question, GameState, NoorMessage, StageResultsData, ActivePuzzle, Puzzl
 import { getQuestions } from '../data/questions';
 import { pickLoreFragment } from '../../data/loreFragments';
 import { pickNoorLine } from '../../data/noorLines';
+import { pickMiniChallenge, findMiniChallenge } from '../data/miniChallenges';
+import { getCollectedCount, getTotalPossible, getCompletionPercent } from '../../data/collectionState';
 
 // Objects for Texture Generation
 import { Star } from '../objects/Star';
@@ -106,8 +108,12 @@ export class MainScene extends Phaser.Scene {
   private activeQuestion: Question | null = null;
   // M2-R1: active fragment lore modal — when set, gameplay is paused and GameUI shows the lore card.
   private activeFragmentLore: { id: string; title: string; body: string; isRare?: boolean } | null = null;
+  // M3A: active mini-challenge modal — replaces legacy activeQuestion popup flow.
+  private activeMiniChallenge: import('../data/miniChallenges').MiniChallenge | null = null;
   // M2-R1b: once-per-run gate for the stage_2_enter Noor line so it can't refire on stage replay.
   private hasFiredStage2NoorThisRun: boolean = false;
+  // M3A: collection progress snapshot pushed to GameState for the HUD progression chip.
+  private collectionSnapshot: { collected: number; total: number; percent: number } = { collected: 0, total: 0, percent: 0 };
   private questionPool: Question[] = [];
   
   // Stage results (desert end / library event)
@@ -445,7 +451,11 @@ export class MainScene extends Phaser.Scene {
     this.physics.world.timeScale = 1.0; 
     this.questionPool = getQuestions(this.currentStage);
     this.activeFragmentLore = null;
+    this.activeMiniChallenge = null;
     this.hasFiredStage2NoorThisRun = false;
+    // M3A: initialize HUD collection snapshot from persistent store so the chip shows progress
+    // from prior runs as soon as gameplay starts.
+    this.collectionSnapshot = { collected: getCollectedCount(), total: getTotalPossible(), percent: getCompletionPercent() };
 
     this.guideFlags = { welcome: false, firstJump: false, firstGate: false };
     this.firstObstacleRef = null;
@@ -465,7 +475,8 @@ export class MainScene extends Phaser.Scene {
   update(time: number, delta: number) {
     if (this.eventManager.eventPhase === 'NUR_INTRO') return;
     if (this.isGameOver) return;
-    if (this.activeMessage || this.activeQuestion) return;
+    if (this.activeMessage || this.activeQuestion || this.activeMiniChallenge) return;
+    if (this.isBookOfNoorOpen) return;
     if (this.isPausedMenu) return;
     // M2-R3: full pause when lore card open — skip the entire update so bg/spawn/event/ambient
     // managers don't run. Combined with tweens.pauseAll() in showFragmentLore, the world freezes.
@@ -1729,6 +1740,35 @@ export class MainScene extends Phaser.Scene {
       this.syncUI();
   }
 
+  /** M3A: hook called by CollisionManager when a new fragment is added to the persistent collection.
+   *  Updates HUD snapshot so the live "X / N" chip refreshes during gameplay (felt progression
+   *  per Yahia 2026-06-01 emphasis — not just menu tracking). */
+  public onCollectionProgress(collected: number, total: number) {
+      const percent = total === 0 ? 0 : Math.min(100, Math.round((collected / total) * 100));
+      this.collectionSnapshot = { collected, total, percent };
+      this.syncUI();
+  }
+
+  // M3A: pause/resume tied to Book of Noor modal — separate flag from isPausedMenu so the
+  // existing pause menu doesn't also render. Mirrors fragment lore modal freeze pattern.
+  private isBookOfNoorOpen: boolean = false;
+  public pauseForBookOfNoor() {
+      if (this.isBookOfNoorOpen || this.isGameOver) return;
+      this.isBookOfNoorOpen = true;
+      this.speedModifier = 0;
+      this.player.anims.pause();
+      if (this.physics.world.isPaused === false) this.physics.pause();
+      this.tweens.pauseAll();
+  }
+  public resumeFromBookOfNoor() {
+      if (!this.isBookOfNoorOpen) return;
+      this.isBookOfNoorOpen = false;
+      if (this.physics.world.isPaused) this.physics.resume();
+      this.player.anims.resume();
+      this.speedModifier = 1.0;
+      this.tweens.resumeAll();
+  }
+
   /** M2-R1: dismiss the lore modal and resume gameplay. Called from GameUI tap-anywhere handler. */
   public dismissFragmentLore() {
       if (!this.activeFragmentLore) return;
@@ -1775,29 +1815,28 @@ export class MainScene extends Phaser.Scene {
       this.syncUI();
   }
 
+  /**
+   * M3A: encounter pause + mini-challenge trigger (replaces legacy question popup flow).
+   * Same entry point name retained so EventManager doesn't need to change every call site.
+   * If `specificId` matches a mini-challenge id, that one is used; otherwise pick from the
+   * current-stage pool.
+   */
   public pauseGameplayForQuestion(specificId?: string) {
-      this.speedModifier = 0; 
+      this.speedModifier = 0;
       this.player.anims.pause();
       if (this.physics.world.isPaused === false) {
-           this.physics.pause();
-           this.hideNoorMessage();
-           this.showQuestionUI(specificId);
+          this.physics.pause();
+          this.hideNoorMessage();
+          this.showMiniChallenge(specificId);
       }
   }
 
-  private showQuestionUI(specificId?: string) {
-      if (this.activeQuestion) return;
-      let question: Question | undefined;
-      if (specificId) {
-          const allQuestions = getQuestions();
-          question = allQuestions.find(q => q.id === specificId);
-      }
-      if (!question) {
-          if (this.questionPool.length === 0) this.questionPool = getQuestions(this.currentStage);
-          question = this.questionPool.pop();
-      }
-      if (question) {
-          this.activeQuestion = question;
+  private showMiniChallenge(specificId?: string) {
+      if (this.activeMiniChallenge) return;
+      let challenge = specificId ? findMiniChallenge(specificId) : undefined;
+      if (!challenge) challenge = pickMiniChallenge(this.currentStage);
+      if (challenge) {
+          this.activeMiniChallenge = challenge;
           this.syncUI();
       }
   }
@@ -1809,6 +1848,7 @@ export class MainScene extends Phaser.Scene {
           this.correctAnswersCount++;
           this.addBondPoints(NOOR_BOND_REWARDS.QUIZ_CORRECT);
           this.activeQuestion = null;
+          this.activeMiniChallenge = null;  // M3A
           this.eventManager.isEncounterOpening = true;
           this.showNoorMessage('أحسنت! استمر، أنت تتقدم.', false, 'encourage');
           this.syncUI();
@@ -1858,6 +1898,7 @@ export class MainScene extends Phaser.Scene {
       // Hold the question UI briefly so the player registers the red feedback before it dismisses.
       this.time.delayedCall(QUESTION_ENCOUNTER.WRONG_FEEDBACK_HOLD_MS, () => {
           this.activeQuestion = null;
+          this.activeMiniChallenge = null;  // M3A
           if (this.physics.world.isPaused) this.physics.resume();
           this.player.anims.resume();
 
@@ -2058,6 +2099,8 @@ export class MainScene extends Phaser.Scene {
           activePuzzle: this.activePuzzle,
           isPaused: this.isPausedMenu,
           activeFragmentLore: this.activeFragmentLore,
+          activeMiniChallenge: this.activeMiniChallenge,
+          collection: this.collectionSnapshot,
       });
   }
 
