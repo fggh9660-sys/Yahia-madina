@@ -11,6 +11,7 @@
  *  - `combo_milestone_mid` — fired when reaching combo tier 2 (mid streak)
  *  - `combo_milestone_high`— fired when reaching combo tier 3+ (high streak)
  *  - `near_miss`           — fired when narrowly avoiding an obstacle (already wired separately)
+ *  - `color_discovery`     — fired mid-run when Noor invites the player to choose their scarf color
  */
 
 export type NoorCue =
@@ -18,7 +19,8 @@ export type NoorCue =
     | 'low_hp_warning'
     | 'combo_milestone_high'
     | 'rare_fragment_discovery'
-    | 'lost_book_intro';
+    | 'lost_book_intro'
+    | 'color_discovery';
 
 type NoorLine = { text: string; tone: 'encourage' | 'warning' | 'success' | 'greet' };
 
@@ -44,6 +46,10 @@ const LINES: Record<NoorCue, NoorLine[]> = {
     ],
     lost_book_intro: [
         { text: 'هناك كتاب مفقود في مكان ما من مدينة العلم… لكن صفحاته تناثرت في أنحاء العالم.', tone: 'greet' },
+    ],
+    color_discovery: [
+        { text: 'انتظر… أرى نوراً يلمع حولك. المدينة تكشف ألوانها — اختر لون وشاحك.', tone: 'greet' },
+        { text: 'كل رحلة لها لونها. أخبرني يا صديقي، أي لون يمثلك؟', tone: 'greet' },
     ],
 };
 

@@ -10,6 +10,7 @@ import { pickLoreFragment } from '../../data/loreFragments';
 import { pickNoorLine } from '../../data/noorLines';
 import { pickMiniChallenge, findMiniChallenge } from '../data/miniChallenges';
 import { getCollectedCount, getTotalPossible, getCompletionPercent } from '../../data/collectionState';
+import { hasPlayerPickedColor } from '../../data/playerColor';
 
 // Objects for Texture Generation
 import { Star } from '../objects/Star';
@@ -110,6 +111,13 @@ export class MainScene extends Phaser.Scene {
   private activeFragmentLore: { id: string; title: string; body: string; isRare?: boolean } | null = null;
   // M3A: active mini-challenge modal — replaces legacy activeQuestion popup flow.
   private activeMiniChallenge: import('../data/miniChallenges').MiniChallenge | null = null;
+  // M3A-R1: in-game Noor color-discovery moment (relocated from the pre-gameplay setup screen per
+  // Yahia 2026-06-02). activeColorChoice freezes the world while the picker is open; colorDiscoveryFired
+  // guards against re-firing within the same run. Triggers once, early in the first run, only until the
+  // player has actually picked a color (localStorage).
+  private activeColorChoice: boolean = false;
+  private colorDiscoveryFired: boolean = false;
+  private readonly COLOR_DISCOVERY_DISTANCE_M = 130;
   // M2-R1b: once-per-run gate for the stage_2_enter Noor line so it can't refire on stage replay.
   private hasFiredStage2NoorThisRun: boolean = false;
   // M3A: collection progress snapshot pushed to GameState for the HUD progression chip.
@@ -452,6 +460,8 @@ export class MainScene extends Phaser.Scene {
     this.questionPool = getQuestions(this.currentStage);
     this.activeFragmentLore = null;
     this.activeMiniChallenge = null;
+    this.activeColorChoice = false;
+    this.colorDiscoveryFired = false;
     this.hasFiredStage2NoorThisRun = false;
     // M3A: initialize HUD collection snapshot from persistent store so the chip shows progress
     // from prior runs as soon as gameplay starts.
@@ -481,6 +491,8 @@ export class MainScene extends Phaser.Scene {
     // M2-R3: full pause when lore card open — skip the entire update so bg/spawn/event/ambient
     // managers don't run. Combined with tweens.pauseAll() in showFragmentLore, the world freezes.
     if (this.activeFragmentLore) return;
+    // M3A-R1: same full-pause treatment while the color-discovery picker is open.
+    if (this.activeColorChoice) return;
 
     // When storm is active, keep all obstacles/collectibles cleared so player cannot lose to obstacles
     const phase = this.eventManager.eventPhase;
@@ -512,6 +524,14 @@ export class MainScene extends Phaser.Scene {
 
     if (currentSpeed > 0) {
         this.runDistance += frameMove * PROGRESS.DISTANCE_SCALE;
+    }
+
+    // M3A-R1: Noor color-discovery moment — fires once, early in the first run, only until the player
+    // has picked a color. Replaces the old pre-gameplay fullscreen picker (Yahia 2026-06-02).
+    if (!this.colorDiscoveryFired && !this.activeColorChoice
+        && this.runDistance >= this.COLOR_DISCOVERY_DISTANCE_M && !hasPlayerPickedColor()) {
+        this.showColorDiscovery();
+        return;
     }
 
     if ((phase === 'SANDSTORM_ONSET' || phase === 'SANDSTORM_WALK' || phase === 'SANDSTORM_APPROACH') && this.sandstormOverlay) {
@@ -1769,6 +1789,34 @@ export class MainScene extends Phaser.Scene {
       this.tweens.resumeAll();
   }
 
+  /** M3A-R1: open the in-game color-discovery moment. Freezes the world (physics + anims + tweens)
+   *  like the fragment lore modal, surfaces a Noor line framing the choice, and flags activeColorChoice
+   *  so React renders the relocated PlayerColorPicker. Resolved by confirmColorChoice(). */
+  public showColorDiscovery() {
+      if (this.activeColorChoice || this.isGameOver) return;
+      this.activeColorChoice = true;
+      this.colorDiscoveryFired = true;
+      this.speedModifier = 0;
+      this.player.anims.pause();
+      if (this.physics.world.isPaused === false) this.physics.pause();
+      this.tweens.pauseAll();
+      const line = pickNoorLine('color_discovery');
+      if (line) this.showNoorMessage(line.text, false, line.tone);
+      this.syncUI();
+  }
+
+  /** M3A-R1: called from App after the player confirms a color (texture already regenerated).
+   *  Clears the flag and resumes gameplay. */
+  public confirmColorChoice() {
+      if (!this.activeColorChoice) return;
+      this.activeColorChoice = false;
+      if (this.physics.world.isPaused) this.physics.resume();
+      this.player.anims.resume();
+      this.speedModifier = 1.0;
+      this.tweens.resumeAll();
+      this.syncUI();
+  }
+
   /** M2-R1: dismiss the lore modal and resume gameplay. Called from GameUI tap-anywhere handler. */
   public dismissFragmentLore() {
       if (!this.activeFragmentLore) return;
@@ -1826,6 +1874,12 @@ export class MainScene extends Phaser.Scene {
       this.player.anims.pause();
       if (this.physics.world.isPaused === false) {
           this.physics.pause();
+          // M3A-R1: full pause during the mini-challenge — same freeze pattern as the fragment lore
+          // modal (M2-R3). update() already early-returns on activeMiniChallenge so managers stop;
+          // this freezes mid-flight ambient tweens (parallax, lantern procession, sandstorm overlay,
+          // fragment bob, mini-encounter chains) so the background doesn't keep moving behind the card.
+          // Resumed in handlePostAnswerDelay (correct) and triggerEncounterMiss (wrong).
+          this.tweens.pauseAll();
           this.hideNoorMessage();
           this.showMiniChallenge(specificId);
       }
@@ -1901,6 +1955,8 @@ export class MainScene extends Phaser.Scene {
           this.activeMiniChallenge = null;  // M3A
           if (this.physics.world.isPaused) this.physics.resume();
           this.player.anims.resume();
+          // M3A-R1: resume ambient tweens frozen by pauseGameplayForQuestion (wrong-answer path).
+          this.tweens.resumeAll();
 
           // Light slowdown penalty (not a stop); tween down then back up after the penalty window.
           this.tweens.add({
@@ -1958,7 +2014,9 @@ export class MainScene extends Phaser.Scene {
       this.time.delayedCall(1000, () => {
          this.physics.resume();
          this.player.anims.resume();
-         this.speedModifier = 1.0; 
+         // M3A-R1: resume ambient tweens frozen by pauseGameplayForQuestion (correct-answer path).
+         this.tweens.resumeAll();
+         this.speedModifier = 1.0;
          
          this.time.delayedCall(3000, () => {
              this.eventManager.isEncounterActive = false;
@@ -2101,6 +2159,7 @@ export class MainScene extends Phaser.Scene {
           activeFragmentLore: this.activeFragmentLore,
           activeMiniChallenge: this.activeMiniChallenge,
           collection: this.collectionSnapshot,
+          activeColorChoice: this.activeColorChoice,
       });
   }
 

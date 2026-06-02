@@ -66,6 +66,8 @@ export interface GameState {
   activeMiniChallenge?: import('./game/data/miniChallenges').MiniChallenge | null;
   /** M3A: live collection progress — shown in HUD + collection screen. */
   collection?: { collected: number; total: number; percent: number };
+  /** M3A-R1: true while the in-game Noor color-discovery moment is open (relocated from pre-gameplay setup). */
+  activeColorChoice?: boolean;
 }
 
 export interface Question {

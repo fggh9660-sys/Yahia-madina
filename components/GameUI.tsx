@@ -16,12 +16,13 @@ interface GameUIProps {
   onResumeClick?: () => void;
   onRestartStageClick?: () => void;
   onReturnToMenuClick?: () => void;
+  onChangeColorClick?: () => void;
   onFragmentLoreDismiss?: () => void;
   onBookOfNoorOpen?: () => void;
   onBookOfNoorClose?: () => void;
 }
 
-export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick, onFragmentLoreDismiss, onBookOfNoorOpen, onBookOfNoorClose }) => {
+export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick, onChangeColorClick, onFragmentLoreDismiss, onBookOfNoorOpen, onBookOfNoorClose }) => {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
   const [showBookOfNoor, setShowBookOfNoor] = useState(false);
@@ -278,6 +279,15 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
               >
                 متابعة اللعب
               </button>
+              {onChangeColorClick && (
+                <button
+                  type="button"
+                  onClick={onChangeColorClick}
+                  className="w-full py-3 px-4 rounded-xl bg-violet-600 hover:bg-violet-500 border border-violet-400/50 text-white font-bold transition-colors"
+                >
+                  🎨 غيّر لونك
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onRestartStageClick}

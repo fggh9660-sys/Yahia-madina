@@ -11,7 +11,6 @@ import { GameState, AgeGroup } from './types';
 import { MainScene } from './game/scenes/MainScene';
 import { HomeScene } from './game/scenes/HomeScene';
 import { PlayerColorPicker } from './components/PlayerColorPicker';
-import { hasPlayerPickedColor } from './data/playerColor';
 import { Player } from './game/objects/Player';
 
 type GameStatus = 'intro_gate' | 'home' | 'how_to_play' | 'age_select' | 'game_details' | 'loading_play' | 'playing';
@@ -27,24 +26,29 @@ function App() {
   // Game Flow: intro_gate -> home -> how_to_play -> age_select -> game_details -> playing
   const [gameStatus, setGameStatus] = useState<GameStatus>('intro_gate');
 
-  // M3A: first-run player color picker — shown once before first game start.
-  const [showColorPicker, setShowColorPicker] = useState<boolean>(false);
+  // M3A-R1: color picker now appears as an in-game Noor discovery moment (driven by
+  // gameState.activeColorChoice) instead of a pre-gameplay setup screen, per Yahia 2026-06-02.
+  // showColorPickerInPause is the optional re-pick affordance from the pause menu.
   const [showColorPickerInPause, setShowColorPickerInPause] = useState<boolean>(false);
 
-  useEffect(() => {
-    // Trigger first-time color picker on initial home view.
-    if (gameStatus === 'home' && !hasPlayerPickedColor()) {
-      setShowColorPicker(true);
-    }
-  }, [gameStatus]);
-
   const handleColorPicked = () => {
-    setShowColorPicker(false);
     setShowColorPickerInPause(false);
-    // Regenerate player texture so the next game start uses the new scarf color.
+    // Regenerate player texture so the scarf color updates immediately.
     if (gameRef.current) {
       const scene = gameRef.current.scene.getScene('MainScene') as MainScene | undefined;
       if (scene) Player.regenerateTexture(scene);
+    }
+  };
+
+  // M3A-R1: confirm handler for the in-game Noor color-discovery moment — regenerate the scarf
+  // texture live, then tell the scene to clear the flag and resume the run.
+  const handleColorDiscoveryPick = () => {
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene | undefined;
+      if (scene) {
+        Player.regenerateTexture(scene);
+        scene.confirmColorChoice?.();
+      }
     }
   };
 
@@ -122,7 +126,8 @@ function App() {
         isPaused: 'isPaused' in d ? (d.isPaused as boolean) : prev.isPaused,
         activeFragmentLore: 'activeFragmentLore' in d ? (d.activeFragmentLore as GameState['activeFragmentLore']) : prev.activeFragmentLore,
         activeMiniChallenge: 'activeMiniChallenge' in d ? (d.activeMiniChallenge as GameState['activeMiniChallenge']) : prev.activeMiniChallenge,
-        collection: 'collection' in d ? (d.collection as GameState['collection']) : prev.collection
+        collection: 'collection' in d ? (d.collection as GameState['collection']) : prev.collection,
+        activeColorChoice: 'activeColorChoice' in d ? (d.activeColorChoice as boolean) : prev.activeColorChoice
       }));
     });
 
@@ -625,6 +630,7 @@ function App() {
             onResumeClick={handleResumeClick}
             onRestartStageClick={handleRestartStageClick}
             onReturnToMenuClick={handleReturnToMenuClick}
+            onChangeColorClick={() => { playUIButton(); setShowColorPickerInPause(true); }}
             onFragmentLoreDismiss={handleFragmentLoreDismiss}
             onBookOfNoorOpen={handleBookOfNoorOpen}
             onBookOfNoorClose={handleBookOfNoorClose}
@@ -638,12 +644,11 @@ function App() {
           {showColorPickerInPause && (
             <PlayerColorPicker onPick={handleColorPicked} onClose={() => setShowColorPickerInPause(false)} />
           )}
+          {/* M3A-R1: in-game Noor color-discovery moment — compact picker over the paused run. */}
+          {gameState.activeColorChoice && (
+            <PlayerColorPicker onPick={handleColorDiscoveryPick} />
+          )}
         </>
-      )}
-
-      {/* M3A: first-time player color picker — overlays any screen until user picks. */}
-      {showColorPicker && (
-        <PlayerColorPicker fullscreen onPick={handleColorPicked} />
       )}
 
       {/* Loading State */}

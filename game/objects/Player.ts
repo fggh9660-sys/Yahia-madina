@@ -826,23 +826,39 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   /** M3A: regenerate textures with the current player-color choice. Called on player-color change
    *  to refresh the scarf tint without restarting the scene. */
   static regenerateTexture(scene: Phaser.Scene) {
-      if (scene.textures.exists('playerSheet')) {
-          scene.textures.remove('playerSheet');
+      if (!scene.textures.exists('playerSheet')) {
+          Player.generateTexture(scene);
+          return;
       }
-      Player.generateTexture(scene);
+      // M3A-R1: re-paint the scarf onto the EXISTING canvas texture in place. Do NOT remove/recreate
+      // mid-run — the live player sprite and its animation frames hold references to this texture's
+      // frames; removing it nulls their glTexture and crashes the WebGL renderer on the next frame.
+      const texture = scene.textures.get('playerSheet') as Phaser.Textures.CanvasTexture;
+      Player.paintSheet(texture);
   }
 
   static generateTexture(scene: Phaser.Scene) {
       if (scene.textures.exists('playerSheet')) return;
-      // ... (Texture generation logic remains same) ...
-      const FW = 128, FH = 128;
-      const RUN_FRAMES = 16;
-      const TOTAL_FRAMES = 36;
-      const COLS = 5;
-      const ROWS = 8;
+      const FW = 128, FH = 128, COLS = 5, ROWS = 8, TOTAL_FRAMES = 36;
       const texture = scene.textures.createCanvas('playerSheet', FW * COLS, FH * ROWS);
       if (!texture) return;
+      Player.paintSheet(texture);
+      for (let i = 0; i < TOTAL_FRAMES; i++) {
+        const col = i % COLS;
+        const row = Math.floor(i / COLS);
+        texture.add(i, 0, col * FW, row * FH, FW, FH);
+      }
+  }
+
+  /** M3A-R1: paint every player frame onto the given canvas texture using the current scarf color.
+   *  Shared by generateTexture (first build) and regenerateTexture (in-place re-paint on color change). */
+  private static paintSheet(texture: Phaser.Textures.CanvasTexture) {
+      const FW = 128, FH = 128;
+      const RUN_FRAMES = 16;
+      const COLS = 5;
       const ctx = texture.context;
+      // Clear first so a previous scarf color doesn't bleed through on re-paint.
+      ctx.clearRect(0, 0, texture.width, texture.height);
       // M3A: scarf color (P.SASH) is dynamic per saved player-color choice. Other palette colors stay fixed.
       const P = { SKIN: '#ffdfc4', SKIN_D: '#e0b090', ROBE_L: '#ffffff', ROBE_D: '#e2e2e2', VEST: '#1abc9c', VEST_D: '#16a085', SASH: getCurrentScarfHex(), GOLD: '#ffd700', SHOES: '#2f3542' };
       
@@ -1048,13 +1064,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       drawFrame(18, 'climb');
       drawFrame(19, 'fall');
       for (let i = 20; i < 36; i++) drawFrame(i, 'struggle');
-      
+
       texture.refresh();
-      
-      for (let i = 0; i < TOTAL_FRAMES; i++) {
-        const col = i % COLS;
-        const row = Math.floor(i / COLS);
-        texture.add(i, 0, col * FW, row * FH, FW, FH);
-      }
   }
 }
