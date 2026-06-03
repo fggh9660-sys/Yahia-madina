@@ -644,9 +644,10 @@ function App() {
           {showColorPickerInPause && (
             <PlayerColorPicker onPick={handleColorPicked} onClose={() => setShowColorPickerInPause(false)} />
           )}
-          {/* M3A-R1: in-game Noor color-discovery moment — compact picker over the paused run. */}
+          {/* M3A-R1: in-game Noor color-discovery moment — discovery picker over the paused run
+              (lighter backdrop + journey copy so Noor's story beat reads through). */}
           {gameState.activeColorChoice && (
-            <PlayerColorPicker onPick={handleColorDiscoveryPick} />
+            <PlayerColorPicker discovery onPick={handleColorDiscoveryPick} />
           )}
         </>
       )}

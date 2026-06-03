@@ -12,6 +12,7 @@
  *  - `combo_milestone_high`— fired when reaching combo tier 3+ (high streak)
  *  - `near_miss`           — fired when narrowly avoiding an obstacle (already wired separately)
  *  - `color_discovery`     — fired mid-run when Noor invites the player to choose their scarf color
+ *  - `color_chosen`        — fired right after the player commits a color (Noor's closing beat)
  */
 
 export type NoorCue =
@@ -20,7 +21,8 @@ export type NoorCue =
     | 'combo_milestone_high'
     | 'rare_fragment_discovery'
     | 'lost_book_intro'
-    | 'color_discovery';
+    | 'color_discovery'
+    | 'color_chosen';
 
 type NoorLine = { text: string; tone: 'encourage' | 'warning' | 'success' | 'greet' };
 
@@ -48,8 +50,14 @@ const LINES: Record<NoorCue, NoorLine[]> = {
         { text: 'هناك كتاب مفقود في مكان ما من مدينة العلم… لكن صفحاته تناثرت في أنحاء العالم.', tone: 'greet' },
     ],
     color_discovery: [
-        { text: 'انتظر… أرى نوراً يلمع حولك. المدينة تكشف ألوانها — اختر لون وشاحك.', tone: 'greet' },
-        { text: 'كل رحلة لها لونها. أخبرني يا صديقي، أي لون يمثلك؟', tone: 'greet' },
+        { text: 'توقّف لحظة يا صديقي… في كل رحلة لحظةٌ يجد فيها المسافر لونه. لقد حانت لحظتك — اختر اللون الذي يرافقك في طريق المعرفة.', tone: 'greet' },
+        { text: 'انظر كيف يلمع النور حولك! يقول القدماء إن لكل قلبٍ لوناً يحمله في رحلته. أخبرني… أي لونٍ يمثّلك أنت؟', tone: 'greet' },
+        { text: 'هذه لحظة خاصة في رحلتنا. اللون الذي تختاره الآن سيصبح جزءاً من هويتك على هذا الطريق. اختر بقلبك.', tone: 'greet' },
+    ],
+    color_chosen: [
+        { text: 'اختيار جميل! ليكن هذا اللون رفيقك على الطريق. هيا نواصل رحلتنا.', tone: 'success' },
+        { text: 'رائع… أرى أن قلبك قد اختار. سيرافقك هذا النور أينما ذهبت.', tone: 'success' },
+        { text: 'الآن أصبحت رحلتك تحمل لونك الخاص. لنُكمل إلى الأمام!', tone: 'success' },
     ],
 };
 

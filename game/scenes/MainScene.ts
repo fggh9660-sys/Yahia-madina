@@ -117,6 +117,9 @@ export class MainScene extends Phaser.Scene {
   // player has actually picked a color (localStorage).
   private activeColorChoice: boolean = false;
   private colorDiscoveryFired: boolean = false;
+  // M3A-R1c: brief frozen "story beat" after the color is committed — Noor acknowledges the choice
+  // before the run resumes, so the moment doesn't end abruptly.
+  private colorAckBeat: boolean = false;
   private readonly COLOR_DISCOVERY_DISTANCE_M = 130;
   // M2-R1b: once-per-run gate for the stage_2_enter Noor line so it can't refire on stage replay.
   private hasFiredStage2NoorThisRun: boolean = false;
@@ -462,6 +465,7 @@ export class MainScene extends Phaser.Scene {
     this.activeMiniChallenge = null;
     this.activeColorChoice = false;
     this.colorDiscoveryFired = false;
+    this.colorAckBeat = false;
     this.hasFiredStage2NoorThisRun = false;
     // M3A: initialize HUD collection snapshot from persistent store so the chip shows progress
     // from prior runs as soon as gameplay starts.
@@ -493,6 +497,8 @@ export class MainScene extends Phaser.Scene {
     if (this.activeFragmentLore) return;
     // M3A-R1: same full-pause treatment while the color-discovery picker is open.
     if (this.activeColorChoice) return;
+    // M3A-R1c: hold the freeze through Noor's brief acknowledgment beat after the choice.
+    if (this.colorAckBeat) return;
 
     // When storm is active, keep all obstacles/collectibles cleared so player cannot lose to obstacles
     const phase = this.eventManager.eventPhase;
@@ -1801,20 +1807,40 @@ export class MainScene extends Phaser.Scene {
       if (this.physics.world.isPaused === false) this.physics.pause();
       this.tweens.pauseAll();
       const line = pickNoorLine('color_discovery');
-      if (line) this.showNoorMessage(line.text, false, line.tone);
+      if (line) {
+          this.showNoorMessage(line.text, false, line.tone);
+          // M3A-R1b (Yahia 2026-06-03): make this a guided story beat, not a quick one-liner —
+          // keep Noor present through the WHOLE choice by cancelling the auto-hide timer.
+          // She's dismissed in confirmColorChoice() once the player commits.
+          if (this.messageTimer) { this.messageTimer.remove(); this.messageTimer = null; }
+      }
       this.syncUI();
   }
 
   /** M3A-R1: called from App after the player confirms a color (texture already regenerated).
-   *  Clears the flag and resumes gameplay. */
+   *  Closes the picker, plays Noor's closing acknowledgment beat, then resumes gameplay. */
   public confirmColorChoice() {
       if (!this.activeColorChoice) return;
-      this.activeColorChoice = false;
-      if (this.physics.world.isPaused) this.physics.resume();
-      this.player.anims.resume();
-      this.speedModifier = 1.0;
-      this.tweens.resumeAll();
+      this.activeColorChoice = false;   // React picker closes
+      // M3A-R1c (Yahia 2026-06-03 feel pass): don't snap straight back to the run — hold the freeze
+      // for a short beat while Noor acknowledges the choice, so the moment lands instead of ending
+      // abruptly. The world stays frozen via colorAckBeat (update() early-returns) until the timer fires.
+      this.colorAckBeat = true;
+      const ack = pickNoorLine('color_chosen');
+      if (ack) {
+          this.showNoorMessage(ack.text, false, ack.tone);
+          if (this.messageTimer) { this.messageTimer.remove(); this.messageTimer = null; }
+      }
       this.syncUI();
+      this.time.delayedCall(1700, () => {
+          this.colorAckBeat = false;
+          this.hideNoorMessage();
+          if (this.physics.world.isPaused) this.physics.resume();
+          this.player.anims.resume();
+          this.speedModifier = 1.0;
+          this.tweens.resumeAll();
+          this.syncUI();
+      });
   }
 
   /** M2-R1: dismiss the lore modal and resume gameplay. Called from GameUI tap-anywhere handler. */

@@ -4,6 +4,9 @@ import { PLAYER_COLORS, PlayerColorId, getSavedPlayerColorId, setSavedPlayerColo
 interface Props {
     /** If true, render as full-screen intro overlay; otherwise compact picker (e.g., in pause menu). */
     fullscreen?: boolean;
+    /** M3A-R1b: discovery mode — the in-game Noor story beat. Lighter backdrop (so the frozen scene +
+     *  Noor read through) and journey-framed copy, vs the utilitarian pause-menu re-pick. */
+    discovery?: boolean;
     /** Called after the player picks (or skips, on intro) so the caller can dismiss + regenerate textures. */
     onPick: (id: PlayerColorId) => void;
     /** Optional dismiss callback for compact mode (cancel button). */
@@ -17,7 +20,7 @@ interface Props {
  * Intro mode renders as a full-screen overlay shown on first run.
  * Compact mode used inside settings/pause menu.
  */
-export const PlayerColorPicker: React.FC<Props> = ({ fullscreen = false, onPick, onClose }) => {
+export const PlayerColorPicker: React.FC<Props> = ({ fullscreen = false, discovery = false, onPick, onClose }) => {
     const [selected, setSelected] = useState<PlayerColorId>(getSavedPlayerColorId());
 
     const handleConfirm = () => {
@@ -27,16 +30,22 @@ export const PlayerColorPicker: React.FC<Props> = ({ fullscreen = false, onPick,
 
     const containerClass = fullscreen
         ? 'absolute inset-0 z-[58] flex items-center justify-center bg-black/85 backdrop-blur-md p-6 animate-in fade-in duration-300'
+        : discovery
+        ? 'absolute inset-0 z-[55] flex items-center justify-center bg-black/45 backdrop-blur-[2px] p-6 animate-in fade-in duration-300'
         : 'absolute inset-0 z-[55] flex items-center justify-center bg-black/70 backdrop-blur-sm p-6';
 
     return (
         <div className={containerClass} dir="rtl">
             <div className="bg-gradient-to-b from-[#2a1d3a] to-[#1a1625] border-2 border-[#ffd700]/60 rounded-2xl p-6 md:p-8 max-w-md w-full shadow-[0_0_60px_rgba(255,215,0,0.25)] animate-in zoom-in-95 duration-300 text-center">
                 <h3 className="text-[#ffd66b] text-xl md:text-2xl font-black mb-2">
-                    {fullscreen ? '✨ اختر لونك ✨' : 'اختر لونك'}
+                    {discovery ? '✨ لحظة اختيار ✨' : fullscreen ? '✨ اختر لونك ✨' : 'اختر لونك'}
                 </h3>
                 <p className="text-white/70 text-sm md:text-base mb-6">
-                    {fullscreen ? 'قبل أن نبدأ رحلتنا، أخبرني… أي لون تحب أكثر؟' : 'سيغير لون وشاحك'}
+                    {discovery
+                        ? 'اختر اللون الذي يمثّل رحلتك'
+                        : fullscreen
+                        ? 'قبل أن نبدأ رحلتنا، أخبرني… أي لون تحب أكثر؟'
+                        : 'سيغير لون وشاحك'}
                 </p>
 
                 <div className="grid grid-cols-4 gap-3 mb-6">
