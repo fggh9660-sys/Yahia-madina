@@ -10,7 +10,7 @@ import { pickLoreFragment } from '../../data/loreFragments';
 import { pickNoorLine } from '../../data/noorLines';
 import { pickMiniChallenge, findMiniChallenge } from '../data/miniChallenges';
 import { getCollectedCount, getTotalPossible, getCompletionPercent } from '../../data/collectionState';
-import { hasPlayerPickedColor } from '../../data/playerColor';
+import { hasSeenColorDiscovery, markColorDiscoverySeen } from '../../data/playerColor';
 
 // Objects for Texture Generation
 import { Star } from '../objects/Star';
@@ -532,10 +532,11 @@ export class MainScene extends Phaser.Scene {
         this.runDistance += frameMove * PROGRESS.DISTANCE_SCALE;
     }
 
-    // M3A-R1: Noor color-discovery moment — fires once, early in the first run, only until the player
-    // has picked a color. Replaces the old pre-gameplay fullscreen picker (Yahia 2026-06-02).
+    // M3A-R1: Noor color-discovery moment — fires once, early in the first run, until the player has
+    // experienced it. Gated on hasSeenColorDiscovery (NOT hasPlayerPickedColor) so returning players
+    // who already have a saved color from the old pre-gameplay picker still get it once (fix 2026-06-03).
     if (!this.colorDiscoveryFired && !this.activeColorChoice
-        && this.runDistance >= this.COLOR_DISCOVERY_DISTANCE_M && !hasPlayerPickedColor()) {
+        && this.runDistance >= this.COLOR_DISCOVERY_DISTANCE_M && !hasSeenColorDiscovery()) {
         this.showColorDiscovery();
         return;
     }
@@ -1822,6 +1823,8 @@ export class MainScene extends Phaser.Scene {
   public confirmColorChoice() {
       if (!this.activeColorChoice) return;
       this.activeColorChoice = false;   // React picker closes
+      // Mark the moment as experienced so it won't retrigger on future runs (persists across sessions).
+      markColorDiscoverySeen();
       // M3A-R1c (Yahia 2026-06-03 feel pass): don't snap straight back to the run — hold the freeze
       // for a short beat while Noor acknowledges the choice, so the moment lands instead of ending
       // abruptly. The world stays frozen via colorAckBeat (update() early-returns) until the timer fires.

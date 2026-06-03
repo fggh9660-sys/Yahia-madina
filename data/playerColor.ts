@@ -60,3 +60,19 @@ export const hasPlayerPickedColor = (): boolean => {
     try { return localStorage.getItem(STORAGE_KEY) !== null; }
     catch { return false; }
 };
+
+const DISCOVERY_SEEN_KEY = 'colorDiscoverySeen';
+
+/** True once the player has experienced the in-game color-discovery moment. Independent of whether a
+ *  color was ever saved — so returning players who already have a `playerColorId` from the old
+ *  pre-gameplay picker still get the relocated discovery moment once. (Fix 2026-06-03: gating the
+ *  trigger on hasPlayerPickedColor meant anyone who touched the old picker never saw the new event.) */
+export const hasSeenColorDiscovery = (): boolean => {
+    try { return localStorage.getItem(DISCOVERY_SEEN_KEY) === '1'; }
+    catch { return false; }
+};
+
+/** Mark the color-discovery moment as experienced so it won't retrigger on future runs. */
+export const markColorDiscoverySeen = (): void => {
+    try { localStorage.setItem(DISCOVERY_SEEN_KEY, '1'); } catch { /* swallow */ }
+};
