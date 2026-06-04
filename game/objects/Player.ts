@@ -1,7 +1,7 @@
 
 import Phaser from 'phaser';
 import { PHYSICS, PERFECT_JUMP, COMBO, BRIDGE_WIND, getPlayerStartX, getPlayerSpawnY, getTouchButtonLayout } from '../../constants';
-import { getCurrentScarfHex } from '../../data/playerColor';
+import { getCurrentScarfHex, getCurrentVestHex, getCurrentVestDarkHex } from '../../data/playerColor';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   // ... (Keep existing declarations) ...
@@ -860,7 +860,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // Clear first so a previous scarf color doesn't bleed through on re-paint.
       ctx.clearRect(0, 0, texture.width, texture.height);
       // M3A: scarf color (P.SASH) is dynamic per saved player-color choice. Other palette colors stay fixed.
-      const P = { SKIN: '#ffdfc4', SKIN_D: '#e0b090', ROBE_L: '#ffffff', ROBE_D: '#e2e2e2', VEST: '#1abc9c', VEST_D: '#16a085', SASH: getCurrentScarfHex(), GOLD: '#ffd700', SHOES: '#2f3542' };
+      // M3B (Yahia 2026-06-04): chosen color now spans scarf (SASH) + vest/arm trims (VEST/VEST_D) so the
+      // identity reads across multiple outfit elements. Robe/skin/gold/shoes stay fixed (still "simple version").
+      const P = { SKIN: '#ffdfc4', SKIN_D: '#e0b090', ROBE_L: '#ffffff', ROBE_D: '#e2e2e2', VEST: getCurrentVestHex(), VEST_D: getCurrentVestDarkHex(), SASH: getCurrentScarfHex(), GOLD: '#ffd700', SHOES: '#2f3542' };
       
       const drawFrame = (index: number, type: 'run' | 'jump' | 'hang' | 'climb' | 'fall' | 'struggle') => {
         const col = index % COLS;

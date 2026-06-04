@@ -55,6 +55,25 @@ export const getCurrentScarfHex = (): string => {
     return findPlayerColor(getSavedPlayerColorId()).hex;
 };
 
+/** Multiply a #rrggbb hex toward black (factor<1) or white (factor>1), clamped. */
+const shadeHex = (hex: string, factor: number): string => {
+    const n = parseInt(hex.replace('#', ''), 16);
+    if (Number.isNaN(n)) return hex;
+    const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+    const r = clamp(((n >> 16) & 0xff) * factor);
+    const g = clamp(((n >> 8) & 0xff) * factor);
+    const b = clamp((n & 0xff) * factor);
+    return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+};
+
+/**
+ * M3B (Yahia 2026-06-04): the chosen color should read as a real identity, not just the scarf.
+ * These derive vest/trim shades from the chosen color so it shows across multiple outfit elements
+ * (scarf + belt + vest + arm trims) — still the "simple version" (no aura/particles; those stay M4).
+ */
+export const getCurrentVestHex = (): string => shadeHex(getCurrentScarfHex(), 0.85);
+export const getCurrentVestDarkHex = (): string => shadeHex(getCurrentScarfHex(), 0.62);
+
 /** True if the player has actively picked a color this session (false on very first load). */
 export const hasPlayerPickedColor = (): boolean => {
     try { return localStorage.getItem(STORAGE_KEY) !== null; }

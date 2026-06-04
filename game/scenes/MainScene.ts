@@ -536,6 +536,8 @@ export class MainScene extends Phaser.Scene {
     if (this.activeColorChoice) return;
     // M3A-R1c: hold the freeze through Noor's brief acknowledgment beat after the choice.
     if (this.colorAckBeat) return;
+    // Bugfix 2026-06-04: old puzzle cards (storm/library/carpet/reward) must freeze the world too.
+    if (this.activePuzzle) return;
 
     // When storm is active, keep all obstacles/collectibles cleared so player cannot lose to obstacles
     const phase = this.eventManager.eventPhase;
@@ -2229,6 +2231,10 @@ export class MainScene extends Phaser.Scene {
       if (!this.physics.world.isPaused) {
           this.physics.pause();
       }
+      // Bugfix 2026-06-04 (Yahia video): the old puzzle cards never fully froze the world — the
+      // update() early-return below + tweens.pauseAll here stop the delta-driven cloud drift and any
+      // mid-flight ambient tweens, matching the mini-challenge / fragment-modal full pause.
+      this.tweens.pauseAll();
       this.syncUI();
 
       if (this.puzzleTimer) this.puzzleTimer.remove();
@@ -2293,6 +2299,7 @@ export class MainScene extends Phaser.Scene {
                   this.physics.resume();
                   this.player.anims.resume();
                   this.speedModifier = 1.0;
+                  this.tweens.resumeAll();
                   this.syncUI();
                   return;
               case 'BRIDGE_BOX':
@@ -2314,6 +2321,7 @@ export class MainScene extends Phaser.Scene {
       this.physics.resume();
       this.player.anims.resume();
       this.speedModifier = 1.0;
+      this.tweens.resumeAll();
       this.syncUI();
   }
 
