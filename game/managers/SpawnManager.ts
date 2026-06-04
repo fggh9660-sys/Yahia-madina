@@ -471,6 +471,12 @@ export class SpawnManager {
                   'SNAKE_SOLO', 'FALCON', 'PLATFORM_SIMPLE_HOP', 'CRUMBLING_ARCH',
                   'SCORPION_HUNT', 'VIPER_NEST', 'ARFAJ_PATCH'
               ];
+          } else if (zone === 'OBSERVATORY') {
+              // M3B — Stage 3: telescope is the signature; mix in jump/star beats for readable flow.
+              patterns = [
+                  'TELESCOPE_SOLO', 'SINGLE_ROCK', 'SPIKE_TRAP', 'FREE_STARS',
+                  'PLATFORM_SIMPLE_HOP', 'RISING_PILLAR', 'TELESCOPE_SOLO'
+              ];
           } else {
             // CITY PATTERNS
               if (currentStage === 2) {
@@ -725,6 +731,12 @@ export class SpawnManager {
               this.obstacles.add(new Obstacle(this.scene, x, groundY, obs('rock')));
               this.addStar(x, groundY - 150);
               baseDelay = 1500;
+              break;
+          case 'TELESCOPE_SOLO':
+              // M3B — Stage 3 signature obstacle.
+              this.obstacles.add(new Obstacle(this.scene, x, groundY, 'telescope'));
+              this.addStar(x, groundY - 170);
+              baseDelay = 1700;
               break;
           case 'SINGLE_CACTUS':
               this.obstacles.add(new Obstacle(this.scene, x, groundY, 'cactus'));

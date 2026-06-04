@@ -10,7 +10,8 @@ function aabbDistance(a: Phaser.Physics.Arcade.Body, b: Phaser.Physics.Arcade.Bo
 }
 
 export type ObstacleType = 'spikes' | 'rock' | 'pillar' | 'orb' | 'snake' | 'wall' | 'falcon' | 'cactus' | 'archway' | 'scorpion' | 'viper' | 'arfaj' | 'book_pile'
-  | 'pillar_city' | 'rock_city' | 'spikes_city';
+  | 'pillar_city' | 'rock_city' | 'spikes_city'
+  | 'telescope';
 
 export class Obstacle extends Phaser.Physics.Arcade.Sprite {
   declare body: Phaser.Physics.Arcade.Body;
@@ -77,6 +78,14 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(30, 80);
         body.setOffset(17, 16);
+        this.addIdleTelegraph();
+        break;
+
+      case 'telescope':
+        // Stage 3 signature obstacle — tripod-mounted telescope. Forgiving hitbox around the base.
+        this.setOrigin(0.5, 1);
+        body.setSize(34, 60);
+        body.setOffset(15, 36);
         this.addIdleTelegraph();
         break;
 
@@ -276,6 +285,58 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
     this.generateViper(scene);
     this.generateArfaj(scene);
     this.generateBookPile(scene);
+    this.generateTelescope(scene);
+  }
+
+  /** M3B — Stage 3 signature obstacle: a brass telescope on a tripod, barrel angled to the sky. */
+  private static generateTelescope(scene: Phaser.Scene) {
+    if (scene.textures.exists('obs_telescope')) return;
+    const W = 64, H = 96;
+    const canvas = scene.textures.createCanvas('obs_telescope', W, H);
+    if (!canvas) return;
+    const ctx = canvas.context;
+    const cx = 32;
+
+    // Tripod legs
+    ctx.strokeStyle = '#2b2350';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(cx, H - 44); ctx.lineTo(cx - 18, H - 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, H - 44); ctx.lineTo(cx + 18, H - 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, H - 44); ctx.lineTo(cx, H - 6); ctx.stroke();
+    // leg feet
+    ctx.fillStyle = '#1b1633';
+    ctx.fillRect(cx - 22, H - 6, 8, 5);
+    ctx.fillRect(cx + 14, H - 6, 8, 5);
+    ctx.fillRect(cx - 4, H - 8, 8, 5);
+
+    // Pivot head
+    ctx.fillStyle = '#241c44';
+    ctx.beginPath(); ctx.arc(cx, H - 48, 8, 0, Math.PI * 2); ctx.fill();
+
+    // Barrel — angled up to the right
+    ctx.save();
+    ctx.translate(cx, H - 48);
+    ctx.rotate(-Math.PI / 4);
+    const grd = ctx.createLinearGradient(-9, 0, 9, 0);
+    grd.addColorStop(0, '#3a2f63');
+    grd.addColorStop(0.5, '#5b4a9e');
+    grd.addColorStop(1, '#2b2350');
+    ctx.fillStyle = grd;
+    ctx.fillRect(-9, -52, 18, 60);
+    // gold rings
+    ctx.fillStyle = '#ffd86b';
+    ctx.fillRect(-9, -52, 18, 5);
+    ctx.fillRect(-9, -28, 18, 3);
+    // lens glow
+    ctx.fillStyle = 'rgba(143,184,255,0.7)';
+    ctx.fillRect(-7, -50, 14, 3);
+    ctx.restore();
+
+    // faint star sparkle near the lens
+    ctx.fillStyle = 'rgba(255,216,107,0.8)';
+    ctx.beginPath(); ctx.arc(54, 18, 1.5, 0, Math.PI * 2); ctx.fill();
+
+    canvas.refresh();
   }
 
   private static generateSpikes(scene: Phaser.Scene) {

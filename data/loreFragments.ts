@@ -13,7 +13,7 @@
 
 export interface LoreFragment {
     id: string;
-    stage?: 1 | 2;
+    stage?: 1 | 2 | 3;
     title: string;
     body: string;
 }
@@ -97,6 +97,41 @@ export const LORE_FRAGMENTS: LoreFragment[] = [
         title: 'صناعة الورق',
         body: 'انتقلت صناعة الورق إلى العالم العربي في القرن الثامن، فازدهرت الكتب.',
     },
+
+    // ─────────────────────────────────────────────────────────────
+    // STAGE 3 — Observatory of the Stars (برج الرصد) / Astronomy
+    // The knowledge journey continues skyward — the Lost Book's pages lead to the heavens.
+    // ─────────────────────────────────────────────────────────────
+    {
+        id: 'obs-telescope',
+        stage: 3,
+        title: 'المرصد',
+        body: 'في المراصد القديمة رصد العلماء النجوم بأدوات دقيقة قبل اختراع التلسكوب الحديث.',
+    },
+    {
+        id: 'obs-moon-phases',
+        stage: 3,
+        title: 'منازل القمر',
+        body: 'قسّم الفلكيون مسار القمر إلى ٢٨ منزلة، استعان بها الناس في معرفة الزمن والمواسم.',
+    },
+    {
+        id: 'obs-al-sufi',
+        stage: 3,
+        title: 'الصوفي والنجوم',
+        body: 'وصف عبد الرحمن الصوفي مئات النجوم في "كتاب صور الكواكب" قبل ألف عام.',
+    },
+    {
+        id: 'obs-navigation',
+        stage: 3,
+        title: 'النجم القطبي',
+        body: 'كان البحّارة يهتدون بالنجم القطبي لأنه يبقى ثابتاً في الشمال طوال الليل.',
+    },
+    {
+        id: 'obs-lost-book-pages',
+        stage: 3,
+        title: 'صفحات بين النجوم',
+        body: 'يُقال إن آخر صفحات الكتاب المفقود رُسمت على هيئة خرائط للسماء.',
+    },
 ];
 
 const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
@@ -107,7 +142,7 @@ const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
  */
 export const pickLoreFragment = (stage?: number): LoreFragment => {
     const exclude = (f: LoreFragment) => f.id !== 'lost-book-intro';
-    const stageMatches = stage === 1 || stage === 2
+    const stageMatches = stage === 1 || stage === 2 || stage === 3
         ? LORE_FRAGMENTS.filter(f => f.stage === stage && exclude(f))
         : [];
     const fallback = LORE_FRAGMENTS.filter(f => f.stage === undefined && exclude(f));

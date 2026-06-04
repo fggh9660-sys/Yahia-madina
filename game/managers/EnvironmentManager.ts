@@ -7,7 +7,7 @@ import { RoadsideArchitecture } from '../objects/RoadsideArchitecture';
 import { MainScene } from '../scenes/MainScene';
 import { PROGRESS, BRIDGE_WIND, BRIDGE_COLLAPSE } from '../../constants';
 
-export type WorldZone = 'DESERT' | 'TRANSITION' | 'CITY' | 'LIBRARY';
+export type WorldZone = 'DESERT' | 'TRANSITION' | 'CITY' | 'LIBRARY' | 'OBSERVATORY';
 /** Visual sub‑zones inside the city – used for Step 5 environment progression. */
 export type CitySegment = 'CITY_ENTRANCE' | 'CITY_STREET' | 'CITY_MARKET' | 'CITY_BAYT';
 
@@ -21,6 +21,7 @@ export class EnvironmentManager {
   private currentZone: WorldZone = 'DESERT';
   private cityStartDistance: number = 0;
   private libraryStartDistance: number = 0;
+  private observatoryStartDistance: number = 0;
   private hasTriggeredLibrary: boolean = false;
   private hasTriggeredBridgeWind: boolean = false;
   /** Current visual segment while in CITY (entrance → streets → market → Bayt). */
@@ -145,6 +146,24 @@ export class EnvironmentManager {
   public finalizeCityTransition() {
       this.currentZone = 'CITY';
       // Reset flags for loop if needed, or advance stage
+  }
+
+  /** M3B — Stage 3: enter the Observatory zone. Swaps ground to polished star-stone and fades the
+   *  background into the observatory domes/colonnade. */
+  public transitionToObservatory() {
+      if (this.currentZone === 'OBSERVATORY') return;
+
+      this.currentZone = 'OBSERVATORY';
+      this.observatoryStartDistance = this.scene.getRunDistance();
+
+      this.background.transitionToObservatory(2500);
+      this.platform.transitionTexture('ground_observatory');
+  }
+
+  /** Distance in meters run while in the Observatory (Stage 3). */
+  public getObservatoryRunDistance(): number {
+      if (this.currentZone !== 'OBSERVATORY') return 0;
+      return Math.max(0, this.scene.getRunDistance() - this.observatoryStartDistance);
   }
 
   public resize(width: number, height: number) {

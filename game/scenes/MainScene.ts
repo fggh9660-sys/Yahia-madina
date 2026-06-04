@@ -121,8 +121,12 @@ export class MainScene extends Phaser.Scene {
   // before the run resumes, so the moment doesn't end abruptly.
   private colorAckBeat: boolean = false;
   private readonly COLOR_DISCOVERY_DISTANCE_M = 130;
+  // Bugfix 2026-06-04: consecutive ticks the run has been frozen with nothing on screen (stuck watchdog).
+  private stuckTicks: number = 0;
   // M2-R1b: once-per-run gate for the stage_2_enter Noor line so it can't refire on stage replay.
   private hasFiredStage2NoorThisRun: boolean = false;
+  // M3B: once-per-run gate for the stage_3_enter Noor line.
+  private hasFiredStage3NoorThisRun: boolean = false;
   // M3A: collection progress snapshot pushed to GameState for the HUD progression chip.
   private collectionSnapshot: { collected: number; total: number; percent: number } = { collected: 0, total: 0, percent: 0 };
   private questionPool: Question[] = [];
@@ -233,6 +237,14 @@ export class MainScene extends Phaser.Scene {
     // 7. Event Listeners
     this.scale.on('resize', this.handleResize, this);
     this.input.on('pointerdown', this.handleGlobalTap, this);
+
+    // M3B (TEMPORARY review aid): jump straight to Stage 3 for preview without a full playthrough.
+    // From the browser console: window.__krEnterStage3(). Remove before final M3B sign-off, once the
+    // natural Stage 2 → 3 progression is hooked up.
+    try { (window as unknown as Record<string, unknown>).__krEnterStage3 = () => this.enterStage3(); } catch { /* ignore */ }
+
+    // Bugfix 2026-06-04: low-frequency stuck-state watchdog so the run can never stay frozen with no modal.
+    this.time.addEvent({ delay: 1200, loop: true, callback: this.checkStuckState, callbackScope: this });
 
     // 8. Bond meter HUD hidden 2026-05-17 pending Yahia's redesign direction. Data scaffold
     //    (state, hooks, data/noorBond.ts) preserved — only the visible HUD + tier-up notification
@@ -467,6 +479,8 @@ export class MainScene extends Phaser.Scene {
     this.colorDiscoveryFired = false;
     this.colorAckBeat = false;
     this.hasFiredStage2NoorThisRun = false;
+    this.hasFiredStage3NoorThisRun = false;
+    this.stuckTicks = 0;
     // M3A: initialize HUD collection snapshot from persistent store so the chip shows progress
     // from prior runs as soon as gameplay starts.
     this.collectionSnapshot = { collected: getCollectedCount(), total: getTotalPossible(), percent: getCompletionPercent() };
@@ -591,6 +605,32 @@ export class MainScene extends Phaser.Scene {
           const line = pickNoorLine('stage_2_enter');
           if (line) this.showNoorMessage(line.text, false, line.tone);
       }
+  }
+
+  /**
+   * M3B — Stage 3 "Observatory of the Stars" entry. This IS the signature event/beat: the ascent
+   * into the observatory. Switches stage to 3, fades the world into the domes/colonnade + star-stone
+   * ground, shows the stage title, and fires Noor's stage_3 line. Idempotent (no-op once in OBSERVATORY).
+   *
+   * Currently invoked via the review shortcut (window.__krEnterStage3) and intended to be hooked into
+   * the natural Stage 2 → 3 progression next.
+   */
+  public enterStage3() {
+      if (this.isGameOver || this.environmentManager.getZone() === 'OBSERVATORY') return;
+      this.currentStage = 3;
+      this.baseSpeed = PHYSICS.RUN_SPEED + ((this.currentStage - 1) * 20);
+      this.questionPool = getQuestions(this.currentStage);
+
+      // Visual ascent: swap ground + fade background to the observatory.
+      this.environmentManager.transitionToObservatory();
+
+      if (!this.hasFiredStage3NoorThisRun) {
+          this.hasFiredStage3NoorThisRun = true;
+          this.showStageTitle('المرحلة 3 — برج الرصد', 2600, () => {});
+          const line = pickNoorLine('stage_3_enter');
+          if (line) this.showNoorMessage(line.text, false, line.tone);
+      }
+      this.syncUI();
   }
 
   private createSandstormOverlay() {
@@ -1914,6 +1954,47 @@ export class MainScene extends Phaser.Scene {
       }
   }
 
+  /**
+   * Stuck-state watchdog (Bugfix 2026-06-04, Yahia "freeze around certain encounters").
+   * Runs on a low-frequency timer (unaffected by physics pause). The M3A full-pause for mini-challenges
+   * (physics.pause + tweens.pauseAll) means a missed resume path leaves the world TOTALLY frozen with
+   * nothing to dismiss — a hard stuck. This force-resumes ONLY when the world has been paused for several
+   * consecutive ticks with NO pause-modal open AND no scripted event running (eventPhase NONE), so it can
+   * never fire during a legitimate pause (reading a lore/challenge card, pause menu, color moment, or a
+   * bridge/sandstorm/hanging/level-end event). The consecutive-tick threshold (~6s) clears the normal
+   * chest/gate resolution window so rewards still play out fully.
+   */
+  private checkStuckState() {
+      const frozen =
+          !this.isGameOver &&
+          this.physics.world.isPaused &&
+          this.eventManager?.eventPhase === 'NONE' &&
+          !this.activeMiniChallenge &&
+          !this.activeQuestion &&
+          !this.activeFragmentLore &&
+          !this.isBookOfNoorOpen &&
+          !this.isPausedMenu &&
+          !this.activeColorChoice &&
+          !this.colorAckBeat &&
+          !this.activePuzzle &&
+          !this.activeMessage &&
+          !this.isSoftPaused &&
+          !(this.currentNoorMessage?.isSoftPause);
+
+      if (!frozen) { this.stuckTicks = 0; return; }
+
+      this.stuckTicks++;
+      if (this.stuckTicks < 5) return;   // ~6s of continuous unexplained freeze
+
+      this.stuckTicks = 0;
+      console.warn('[MainScene] stuck-state watchdog: force-resuming a frozen run.');
+      if (this.physics.world.isPaused) this.physics.resume();
+      this.player?.anims.resume();
+      this.speedModifier = 1.0;
+      this.tweens.resumeAll();
+      this.syncUI();
+  }
+
   private showMiniChallenge(specificId?: string) {
       if (this.activeMiniChallenge) return;
       let challenge = specificId ? findMiniChallenge(specificId) : undefined;
@@ -1948,6 +2029,12 @@ export class MainScene extends Phaser.Scene {
                   this.spawnCorrectAnswerBonusStars();
                   this.handlePostAnswerDelay(false);
               });
+          } else {
+              // Bugfix 2026-06-04 (Yahia "stuck around encounters"): the encounter object is missing/stale
+              // (e.g. already cleaned up, or a non-gate/chest trigger). Without this branch handlePostAnswerDelay
+              // never runs, so the world stays paused (physics + tweens frozen by the M3A full-pause) and the
+              // player is stuck with nothing to dismiss. Always resume.
+              this.handlePostAnswerDelay(false);
           }
       } else {
           // M2: wrong answer is NO LONGER a blocking gate.

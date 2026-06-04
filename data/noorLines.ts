@@ -17,6 +17,7 @@
 
 export type NoorCue =
     | 'stage_2_enter'
+    | 'stage_3_enter'
     | 'low_hp_warning'
     | 'combo_milestone_high'
     | 'rare_fragment_discovery'
@@ -31,6 +32,10 @@ const LINES: Record<NoorCue, NoorLine[]> = {
         { text: 'لقد وصلنا إلى مدينة الحكمة. أبواب المعرفة تفتح أمامنا.', tone: 'success' },
         { text: 'هذه المدينة تخفي علوماً كثيرة. تابع التقدم!', tone: 'encourage' },
         { text: 'مرحباً بك في بغداد القديمة، قلب العلم.', tone: 'success' },
+    ],
+    stage_3_enter: [
+        { text: 'انظر إلى الأعلى يا صديقي… لقد بلغنا برج الرصد، حيث يلتقي العلم بالسماء.', tone: 'success' },
+        { text: 'هنا رصد العلماء النجوم والأفلاك. رحلتنا تصعد الآن نحو السماء!', tone: 'success' },
     ],
     low_hp_warning: [
         { text: 'احذر يا صديقي… قلبٌ واحد فقط متبقٍ.', tone: 'warning' },

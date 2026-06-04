@@ -5,6 +5,7 @@ import { AtmosphereGenerator } from '../generators/AtmosphereGenerator';
 import { DesertLayers } from './backgrounds/DesertLayers';
 import { CityLayers } from './backgrounds/CityLayers';
 import { LibraryLayers } from './backgrounds/LibraryLayers';
+import { ObservatoryLayers } from './backgrounds/ObservatoryLayers';
 
 export class Background {
   private scene: Phaser.Scene;
@@ -15,6 +16,7 @@ export class Background {
   private desertLayers: DesertLayers;
   private cityLayers: CityLayers;
   private libraryLayers: LibraryLayers;
+  private observatoryLayers: ObservatoryLayers;
 
   // -- ATMOSPHERE --
   private sky!: Phaser.GameObjects.Image;
@@ -29,6 +31,7 @@ export class Background {
   // State
   private isCityActive: boolean = false;
   private isLibraryActive: boolean = false;
+  private isObservatoryActive: boolean = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -38,6 +41,7 @@ export class Background {
     this.desertLayers = new DesertLayers(scene);
     this.cityLayers = new CityLayers(scene);
     this.libraryLayers = new LibraryLayers(scene);
+    this.observatoryLayers = new ObservatoryLayers(scene);
 
     AtmosphereGenerator.init(scene);
     this.create();
@@ -53,6 +57,7 @@ export class Background {
     this.cityLayers.create(this.width, this.height);
     this.desertLayers.create(this.width, this.height);
     this.libraryLayers.create(this.width, this.height);
+    this.observatoryLayers.create(this.width, this.height);
     
     this.createParticles();
   }
@@ -81,6 +86,7 @@ export class Background {
       this.cityLayers.resize(width, height);
       this.desertLayers.resize(width, height);
       this.libraryLayers.resize(width, height);
+      this.observatoryLayers.resize(width, height);
   }
 
   public update(time: number, delta: number, speed: number) {
@@ -90,6 +96,7 @@ export class Background {
     this.desertLayers.update(speed);
     this.cityLayers.update(speed);
     this.libraryLayers.update(speed);
+    this.observatoryLayers.update(speed);
 
     this.updateShootingStars(time);
     
@@ -147,6 +154,34 @@ export class Background {
   public setFlightMode(active: boolean) {
       // Pass flight status to City Layers to handle foreground elements
       this.cityLayers.setFlightMode(active);
+  }
+
+  /** M3B — Stage 3: ascend into the Observatory. Fade out whatever world layer is active,
+   *  fade in the observatory domes + colonnade, and lean into the night sky (haze/clouds out so
+   *  the existing starfield + moon carry the celestial mood). */
+  public transitionToObservatory(duration: number = 3000) {
+      if (this.isObservatoryActive) return;
+      this.isObservatoryActive = true;
+
+      this.libraryLayers.fadeOut(duration);
+      this.cityLayers.fadeOut(duration);
+      this.desertLayers.fadeOut(duration);
+      this.observatoryLayers.fadeIn(duration);
+
+      // Clear the daytime haze/clouds so the night sky reads cleanly.
+      this.scene.tweens.add({
+          targets: [this.haze, this.clouds1, this.clouds2],
+          alpha: 0,
+          duration
+      });
+
+      // Brighten the existing starfield for the observatory.
+      if (this.starsGroup) {
+          this.starsGroup.getChildren().forEach((s) => {
+              const star = s as Phaser.GameObjects.Image;
+              this.scene.tweens.add({ targets: star, alpha: Math.min(1, (star.alpha || 0.5) + 0.3), duration });
+          });
+      }
   }
 
   private createSky() {
