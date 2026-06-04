@@ -8,7 +8,7 @@ import { Question, GameState, NoorMessage, StageResultsData, ActivePuzzle, Puzzl
 import { getQuestions } from '../data/questions';
 import { pickLoreFragment } from '../../data/loreFragments';
 import { pickNoorLine } from '../../data/noorLines';
-import { pickMiniChallenge, findMiniChallenge } from '../data/miniChallenges';
+import { pickMiniChallenge, findMiniChallenge, pickMiniChallengeByEvent, type ChallengeEvent } from '../data/miniChallenges';
 import { getCollectedCount, getTotalPossible, getCompletionPercent } from '../../data/collectionState';
 import { hasSeenColorDiscovery, markColorDiscoverySeen } from '../../data/playerColor';
 
@@ -138,7 +138,7 @@ export class MainScene extends Phaser.Scene {
   private cityStageStartTime: number = 0;
   private cityStartDistanceForStats: number = 0;
   public stageResults: StageResultsData | null = null;
-  public pendingTransition: 'DESERT_END' | 'LIBRARY_END' | null = null;
+  public pendingTransition: 'DESERT_END' | 'LIBRARY_END' | 'OBSERVATORY_END' | null = null;
   
   // Phase 4: Climbing
   public climbProgress: number = 0;
@@ -425,11 +425,34 @@ export class MainScene extends Phaser.Scene {
     this.syncUI();
   }
 
+  /** M3B — end of Stage 3 (Observatory). Shows the results, then continue rolls into the finale. */
+  public showObservatoryStageResults() {
+    this.audioManager?.stopBGM();
+    this.audioManager?.playStageSuccess();
+    this.stageResults = {
+      stageName: 'برج الرصد',
+      distance: Math.max(0, Math.round(this.environmentManager.getObservatoryRunDistance())),
+      stars: this.collectedStarsCount,
+      correctAnswers: this.correctAnswersCount,
+      wrongAnswers: this.wrongAnswersCount,
+      timeSeconds: (this.time.now - this.stageStartTime) / 1000
+    };
+    this.showNoorMessage('لقد بلغنا النجوم… ورحلة العلم لا تنتهي أبداً.', false, 'success');
+    this.pendingTransition = 'OBSERVATORY_END';
+    this.syncUI();
+  }
+
   public continueAfterStageResults() {
     if (this.pendingTransition === 'DESERT_END') {
       if (this.nurController) this.nurController.hide();
       this.eventManager.continueDesertTransition();
     } else if (this.pendingTransition === 'LIBRARY_END') {
+      // M3B: the library (end of Stage 2) now ascends into Stage 3 (Observatory) instead of ending the run.
+      if (this.nurController) this.nurController.hide();
+      this.ascendToStage3();
+      return;
+    } else if (this.pendingTransition === 'OBSERVATORY_END') {
+      // M3B: end of Stage 3 → the journey's finale.
       if (this.nurController) this.nurController.hide();
       this.beginFinalCinematicEnding();
       return;
@@ -631,6 +654,45 @@ export class MainScene extends Phaser.Scene {
           if (line) this.showNoorMessage(line.text, false, line.tone);
       }
       this.syncUI();
+  }
+
+  /**
+   * M3B — natural Stage 2 → 3 progression. The library results screen (end of Stage 2) now ascends
+   * UP into the Observatory (Stage 3) instead of ending the run. Mirrors the proven Stage 1→2 reset
+   * choreography (startStage2Transition / beginStage2Intro): stop, reposition the player, clear the old
+   * world, fade through black, switch to the observatory, then resume the run after the stage title beat.
+   */
+  private ascendToStage3() {
+      this.stageResults = null;
+      this.pendingTransition = null;
+      if (this.nurController) this.nurController.hide();
+
+      // Stop the run and reset the player to the start lane (scale/alpha may have been tweened).
+      this.setGameSpeed(0);
+      this.player.setScale(1);
+      this.player.setAlpha(1);
+      this.player.setDepth(20);
+      this.player.setPosition(getPlayerStartX(this.scale.width), getPlayerSpawnY(this.scale.height));
+      this.spawnManager.removeAllSpawned();
+      this.syncUI();
+
+      this.cameras.main.fadeOut(600, 5, 2, 20);
+      this.cameras.main.once('camerafadeoutcomplete', () => {
+          // Switch stage + zone + show the ascent title/Noor line.
+          this.enterStage3();
+          // Clear any leftover encounter/event state so the Stage 3 run is free.
+          this.eventManager.eventPhase = 'NONE';
+          this.eventManager.isEncounterActive = false;
+          this.eventManager.encounterType = 'NONE';
+          this.audioManager?.resumeBGM();
+
+          this.cameras.main.fadeIn(1200, 5, 2, 20);
+          // Resume running once the title beat has landed.
+          this.time.delayedCall(2600, () => {
+              this.setGameSpeed(1.0);
+              this.player.play('run');
+          });
+      });
   }
 
   private createSandstormOverlay() {
@@ -1938,7 +2000,7 @@ export class MainScene extends Phaser.Scene {
    * If `specificId` matches a mini-challenge id, that one is used; otherwise pick from the
    * current-stage pool.
    */
-  public pauseGameplayForQuestion(specificId?: string) {
+  public pauseGameplayForQuestion(specificId?: string, event?: ChallengeEvent) {
       this.speedModifier = 0;
       this.player.anims.pause();
       if (this.physics.world.isPaused === false) {
@@ -1950,7 +2012,7 @@ export class MainScene extends Phaser.Scene {
           // Resumed in handlePostAnswerDelay (correct) and triggerEncounterMiss (wrong).
           this.tweens.pauseAll();
           this.hideNoorMessage();
-          this.showMiniChallenge(specificId);
+          this.showMiniChallenge(specificId, event);
       }
   }
 
@@ -1995,9 +2057,12 @@ export class MainScene extends Phaser.Scene {
       this.syncUI();
   }
 
-  private showMiniChallenge(specificId?: string) {
+  private showMiniChallenge(specificId?: string, event?: ChallengeEvent) {
       if (this.activeMiniChallenge) return;
       let challenge = specificId ? findMiniChallenge(specificId) : undefined;
+      // M3B: event-linked — a themed encounter forces its mapped challenge type (Storm→Fruit,
+      // Oasis→Color, Ruins→Pair, Caravan→Object) and tags it so the modal shows the event header.
+      if (!challenge && event) challenge = pickMiniChallengeByEvent(event, this.currentStage);
       if (!challenge) challenge = pickMiniChallenge(this.currentStage);
       if (challenge) {
           this.activeMiniChallenge = challenge;
@@ -2360,7 +2425,7 @@ export class MainScene extends Phaser.Scene {
       const isNarrow = width < 400;
       const txt = this.add.text(width / 2, height / 2, finalMessage, {
           fontFamily: 'Cairo',
-          fontSize: isNarrow ? '22px' : '28px',
+          fontSize: isNarrow ? '22px' : '28px', 
           fontStyle: 'bold',
           color: '#e8c547',
           align: 'center'

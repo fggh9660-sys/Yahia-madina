@@ -346,6 +346,7 @@ export const UI_STRINGS = {
 export const PROGRESS = {
   STAGE_1_LENGTH_M: 450,
   STAGE_2_LENGTH_M: 600,
+  STAGE_3_LENGTH_M: 450, // M3B: Observatory run length before the finale.
   DISTANCE_SCALE: 0.0137,
 };
 

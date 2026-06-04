@@ -182,6 +182,15 @@ export class Background {
               this.scene.tweens.add({ targets: star, alpha: Math.min(1, (star.alpha || 0.5) + 0.3), duration });
           });
       }
+
+      // Soft nebula glow drifting across the upper sky — a signature of the celestial stage.
+      const nebula = this.scene.add.ellipse(this.width * 0.5, this.height * 0.26, this.width * 1.3, this.height * 0.55, 0x3a5bd0);
+      nebula.setScrollFactor(0);
+      nebula.setBlendMode(Phaser.BlendModes.ADD);
+      nebula.setDepth(-88);
+      nebula.setAlpha(0);
+      this.scene.tweens.add({ targets: nebula, alpha: 0.14, duration });
+      this.scene.tweens.add({ targets: nebula, scaleX: 1.12, scaleY: 1.2, duration: 9000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
 
   private createSky() {
@@ -297,7 +306,10 @@ export class Background {
 
   private updateShootingStars(time: number) {
     if (time > this.shootingStarTimer) {
-        this.shootingStarTimer = time + Phaser.Math.Between(10000, 25000); 
+        // M3B: the Observatory sky is far more active — shooting stars streak much more often.
+        this.shootingStarTimer = time + (this.isObservatoryActive
+            ? Phaser.Math.Between(2500, 6000)
+            : Phaser.Math.Between(10000, 25000));
         const startX = Phaser.Math.Between(this.width * 0.2, this.width * 0.8);
         const startY = Phaser.Math.Between(0, this.height * 0.3);
         

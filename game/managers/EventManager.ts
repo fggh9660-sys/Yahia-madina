@@ -9,6 +9,7 @@ import { Star } from '../objects/Star';
 import { MainScene } from '../scenes/MainScene';
 import { MagicGate } from '../objects/MagicGate';
 import { MagicChest } from '../objects/MagicChest';
+import { CHALLENGE_EVENTS, type ChallengeEvent } from '../data/miniChallenges';
 import { BedouinTent } from '../objects/BedouinTent';
 import { LibraryBuilding } from '../objects/LibraryBuilding';
 import { MagicCarpet } from '../objects/MagicCarpet';
@@ -40,6 +41,10 @@ export class EventManager {
   public queuedEncounter: EncounterType = 'NONE';
   public isEncounterActive: boolean = false;
   public isEncounterOpening: boolean = false;
+  // M3B: themed event for the current encounter (Storm/Oasis/Ruins/Caravan) — selected per chest and
+  // passed to the mini-challenge so it surfaces the event's linked type. Rotates so all 4 appear.
+  private encounterTheme: ChallengeEvent = 'storm';
+  private encounterThemeIdx: number = 0;
   
   public currentGate: MagicGate | null = null;
   public currentChest: MagicChest | null = null;
@@ -77,11 +82,13 @@ export class EventManager {
 
   /** Distance in meters within library zone before carpet spawns (tunable) */
   public readonly STAGE_2_LENGTH_M = PROGRESS.STAGE_2_LENGTH_M;
+  public readonly STAGE_3_LENGTH_M = PROGRESS.STAGE_3_LENGTH_M;
   private readonly CARPET_SPAWN_DIST_M = 400;
   private carpetMissed: boolean = false;
   private nextCarpetSpawnPos: number = 0;
   /** True once Stage 2 has been ended (library results shown) so we don't trigger again. */
   private stage2EndTriggered: boolean = false;
+  private stage3EndTriggered: boolean = false;
 
   /** City road carpet: visible on the path; when player reaches it, Nur invites then ride. */
   private hasSpawnedRoadCarpet: boolean = false;
@@ -286,6 +293,7 @@ export class EventManager {
           if (this.eventPhase === 'NONE') {
               this.checkLevelEnd();
               this.checkStage2End();
+              this.checkStage3End();
               this.checkLibraryEvent();
               this.checkCityRoadCarpet();
           }
@@ -305,6 +313,18 @@ export class EventManager {
           this.stage2EndTriggered = true;
           this.scene.setGameSpeed(0);
           this.scene.showLibraryStageResults();
+      }
+  }
+
+  /** M3B — end Stage 3 after the full Observatory run, then roll into the finale. */
+  private checkStage3End() {
+      if (this.stage3EndTriggered || this.scene.getCurrentStage() !== 3) return;
+      if (this.scene.environmentManager.getZone() !== 'OBSERVATORY') return;
+      const distInObs = this.scene.environmentManager.getObservatoryRunDistance();
+      if (distInObs >= this.STAGE_3_LENGTH_M) {
+          this.stage3EndTriggered = true;
+          this.scene.setGameSpeed(0);
+          this.scene.showObservatoryStageResults();
       }
   }
 
@@ -1378,6 +1398,9 @@ export class EventManager {
       this.isEncounterActive = true;
       this.encounterType = 'CHEST';
       this.isEncounterOpening = false;
+      // M3B: assign this encounter a themed event, rotating so Storm/Oasis/Ruins/Caravan all appear.
+      this.encounterTheme = CHALLENGE_EVENTS[this.encounterThemeIdx % CHALLENGE_EVENTS.length];
+      this.encounterThemeIdx++;
       const onPlatform = Math.random() > 0.4;
       if (onPlatform) {
           const platY = groundY - 100;
@@ -1403,16 +1426,19 @@ export class EventManager {
 
       if (objectX <= stopX && !this.isEncounterOpening) {
           if (this.encounterType === 'CHEST') {
-              this.scene.pauseGameplayForQuestion();
+              this.scene.pauseGameplayForQuestion(undefined, this.encounterTheme);
           }
       }
   }
 
   public reset() {
-      this.eventPhase = 'NUR_INTRO'; 
+      this.eventPhase = 'NUR_INTRO';
       this.introTimer = 0;
       this.encounterType = 'NONE';
       this.queuedEncounter = 'NONE';
+      this.stage2EndTriggered = false;
+      this.stage3EndTriggered = false;
+      this.encounterThemeIdx = 0;
       this.isEncounterActive = false;
       this.isEncounterOpening = false;
       this.sandstormTriggered = false; 

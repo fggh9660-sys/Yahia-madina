@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     MiniChallenge,
     ColorMatchData,
     FruitMatchData,
     PairMatchData,
     ObjectOrderData,
+    EVENT_META,
 } from '../game/data/miniChallenges';
 
 interface Props {
@@ -24,6 +25,14 @@ export const MiniChallengeModal: React.FC<Props> = ({ challenge, onAnswer }) => 
             dir="rtl"
         >
             <div className="bg-gradient-to-b from-[#2a1d3a] to-[#1a1625] border-2 border-[#ffd700]/60 rounded-2xl p-5 md:p-7 max-w-md w-full shadow-[0_0_60px_rgba(255,215,0,0.25)] animate-in zoom-in-95 duration-300">
+                {challenge.event && (
+                    <div className="flex items-center justify-center gap-2 mb-3">
+                        <span className="text-2xl">{EVENT_META[challenge.event].icon}</span>
+                        <span className="text-[#ffd700]/80 text-xs md:text-sm font-bold tracking-wide uppercase">
+                            {EVENT_META[challenge.event].label}
+                        </span>
+                    </div>
+                )}
                 <h3 className="text-[#ffd66b] text-lg md:text-xl font-black text-center mb-4">
                     {challenge.prompt}
                 </h3>
@@ -89,42 +98,102 @@ const ColorMatchUI: React.FC<{ data: ColorMatchData; onAnswer: (c: boolean) => v
 };
 
 // ─────────────────────────────────────────────────────────────
-// FRUIT MATCH — pick the fruit matching targetFruit
+// FRUIT MATCH — drag the matching fruit onto its silhouette (M3B rework per Yahia ref).
+// Pointer-event based (not HTML5 DnD) so it works on iOS Safari touch.
 // ─────────────────────────────────────────────────────────────
 const FruitMatchUI: React.FC<{ data: FruitMatchData; onAnswer: (c: boolean) => void }> = ({ data, onAnswer }) => {
-    const [picked, setPicked] = useState<string | null>(null);
-    const handlePick = (fruit: string) => {
-        if (picked) return;
-        setPicked(fruit);
-        setTimeout(() => onAnswer(fruit === data.targetFruit), 600);
+    const [dragging, setDragging] = useState<{ fruit: string; x: number; y: number } | null>(null);
+    const [result, setResult] = useState<'correct' | 'wrong' | null>(null);
+    const silRef = useRef<HTMLDivElement>(null);
+
+    const startDrag = (fruit: string, e: React.PointerEvent) => {
+        if (result) return;
+        setDragging({ fruit, x: e.clientX, y: e.clientY });
     };
+
+    useEffect(() => {
+        if (!dragging) return;
+        const move = (e: PointerEvent) =>
+            setDragging(d => (d ? { ...d, x: e.clientX, y: e.clientY } : d));
+        const up = (e: PointerEvent) => {
+            const fruit = dragging.fruit;
+            const sil = silRef.current?.getBoundingClientRect();
+            const over =
+                !!sil &&
+                e.clientX >= sil.left && e.clientX <= sil.right &&
+                e.clientY >= sil.top && e.clientY <= sil.bottom;
+            setDragging(null);
+            if (over) {
+                const correct = fruit === data.targetFruit;
+                setResult(correct ? 'correct' : 'wrong');
+                setTimeout(() => onAnswer(correct), 750);
+            }
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+        return () => {
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerup', up);
+        };
+    }, [dragging, data.targetFruit, onAnswer]);
+
+    const placed = result !== null;
+
     return (
-        <div className="flex flex-col items-center gap-4">
-            <div className="text-white/80 text-sm mb-1">الفاكهة المطلوبة</div>
-            <div className="text-6xl">{data.targetFruit}</div>
-            <div className="grid grid-cols-4 gap-3 mt-3 w-full">
-                {data.options.map((f, i) => {
-                    const isPicked = picked === f;
-                    const isCorrect = f === data.targetFruit;
-                    const ring =
-                        picked && isPicked
-                            ? isCorrect
-                                ? 'ring-4 ring-emerald-400'
-                                : 'ring-4 ring-red-400'
-                            : 'ring-2 ring-white/20';
-                    return (
-                        <button
-                            key={i}
-                            type="button"
-                            disabled={!!picked}
-                            onClick={() => handlePick(f)}
-                            className={`aspect-square rounded-xl bg-white/5 ${ring} flex items-center justify-center text-4xl cursor-pointer touch-manipulation transition-transform active:scale-95`}
-                        >
-                            {f}
-                        </button>
-                    );
-                })}
+        <div className="flex flex-col items-center gap-5 select-none" style={{ touchAction: 'none' }}>
+            <div className="text-white/80 text-sm">اسحب الفاكهة الصحيحة إلى الظل</div>
+
+            {/* Silhouette drop target — shows the target fruit as a dark shadow until matched */}
+            <div
+                ref={silRef}
+                className={`w-24 h-24 rounded-2xl border-2 border-dashed flex items-center justify-center text-6xl transition-all duration-200 ${
+                    result === 'correct'
+                        ? 'border-emerald-400 bg-emerald-400/10 scale-105'
+                        : result === 'wrong'
+                        ? 'border-red-400 bg-red-400/10'
+                        : 'border-white/40 bg-white/5'
+                }`}
+            >
+                {result === 'wrong' ? (
+                    <span>❌</span>
+                ) : (
+                    <span
+                        style={{
+                            filter: result === 'correct' ? 'none' : 'brightness(0) invert(0.22)',
+                            opacity: result === 'correct' ? 1 : 0.85,
+                        }}
+                    >
+                        {data.targetFruit}
+                    </span>
+                )}
             </div>
+
+            {/* Fruit options to drag */}
+            <div className="grid grid-cols-4 gap-3 w-full">
+                {data.options.map((f, i) => (
+                    <button
+                        key={i}
+                        type="button"
+                        disabled={placed}
+                        onPointerDown={e => startDrag(f, e)}
+                        className={`aspect-square rounded-xl bg-white/5 ring-2 ring-white/20 flex items-center justify-center text-4xl touch-manipulation transition-opacity ${
+                            dragging?.fruit === f ? 'opacity-30' : ''
+                        }`}
+                    >
+                        {f}
+                    </button>
+                ))}
+            </div>
+
+            {/* Floating fruit that follows the pointer while dragging */}
+            {dragging && (
+                <div
+                    className="fixed pointer-events-none text-5xl z-[70] drop-shadow-lg"
+                    style={{ left: dragging.x, top: dragging.y, transform: 'translate(-50%, -50%)' }}
+                >
+                    {dragging.fruit}
+                </div>
+            )}
         </div>
     );
 };

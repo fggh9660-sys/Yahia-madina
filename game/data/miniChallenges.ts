@@ -19,9 +19,40 @@ export interface MiniChallenge {
     type: MiniChallengeType;
     prompt: string;
     data: ColorMatchData | FruitMatchData | PairMatchData | ObjectOrderData;
-    stage?: 1 | 2;
+    stage?: 1 | 2 | 3;
     timeoutMs?: number;
+    /** M3B: set at pick-time when this challenge is surfaced through a themed event encounter. */
+    event?: ChallengeEvent;
 }
+
+/**
+ * M3B — event-linked challenges (Yahia 2026-06-02 lock). Each desert event triggers a specific
+ * challenge type:
+ *   Desert Storm  → Fruit Matching
+ *   Oasis         → Color Matching
+ *   Ancient Ruins → Pair Matching
+ *   Caravan Stop  → Object Ordering
+ * (Note: the in-world set-piece VISUALS for these events are pending Yahia's reference images — this
+ *  ships the linking mechanism + themed framing; the encounter art is the next iteration.)
+ */
+export type ChallengeEvent = 'storm' | 'oasis' | 'ruins' | 'caravan';
+
+const EVENT_TYPE: Record<ChallengeEvent, MiniChallengeType> = {
+    storm: 'FRUIT_MATCH',
+    oasis: 'COLOR_MATCH',
+    ruins: 'PAIR_MATCH',
+    caravan: 'OBJECT_ORDER',
+};
+
+/** Display metadata for each event — shown as the themed header on the challenge modal. */
+export const EVENT_META: Record<ChallengeEvent, { icon: string; label: string }> = {
+    storm: { icon: '🌪️', label: 'العاصفة الرملية' },
+    oasis: { icon: '🌴', label: 'الواحة' },
+    ruins: { icon: '🏛️', label: 'الأطلال القديمة' },
+    caravan: { icon: '🐪', label: 'محطة القافلة' },
+};
+
+export const CHALLENGE_EVENTS: ChallengeEvent[] = ['storm', 'oasis', 'ruins', 'caravan'];
 
 /** Pick the swatch that matches the highlighted target color. */
 export interface ColorMatchData {
@@ -144,3 +175,16 @@ export const pickMiniChallenge = (stage?: number): MiniChallenge => {
 /** Lookup by id for explicit triggers (debug, specific encounter scripting). */
 export const findMiniChallenge = (id: string): MiniChallenge | undefined =>
     MINI_CHALLENGES.find(c => c.id === id);
+
+/**
+ * M3B — pick a challenge for a themed event (Storm/Oasis/Ruins/Caravan). Returns a challenge of the
+ * event's linked type, tagged with the event so the modal can show the themed header. Prefers the
+ * current stage's pool, falls back across stages so an event always has a challenge to show.
+ */
+export const pickMiniChallengeByEvent = (event: ChallengeEvent, stage?: number): MiniChallenge => {
+    const type = EVENT_TYPE[event];
+    const byType = MINI_CHALLENGES.filter(c => c.type === type);
+    const staged = byType.filter(c => c.stage === stage);
+    const pool = staged.length > 0 ? staged : (byType.length > 0 ? byType : MINI_CHALLENGES);
+    return { ...shuffle(pool)[0], event };
+};
