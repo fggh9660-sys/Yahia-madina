@@ -346,7 +346,7 @@ export const UI_STRINGS = {
 export const PROGRESS = {
   STAGE_1_LENGTH_M: 450,
   STAGE_2_LENGTH_M: 600,
-  STAGE_3_LENGTH_M: 450, // M3B: Observatory run length before the finale.
+  STAGE_3_LENGTH_M: 5000, // M3B: Observatory run length before the finale. TEMP placeholder (long run to explore the new world) — final value pending Yahia's Stage 3 design doc.
   DISTANCE_SCALE: 0.0137,
 };
 

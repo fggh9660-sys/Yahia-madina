@@ -148,6 +148,10 @@ export class MainScene extends Phaser.Scene {
 
   // Step 6 – Mini puzzles (storm / library / dual-path)
   private activePuzzle: ActivePuzzle | null = null;
+  // M3B (Yahia 2026-06-04): old event quiz cards now render as visual mini-challenges. When true, the
+  // active mini-challenge is backing an ActivePuzzle and its answer routes to resolvePuzzle (outcome),
+  // not the chest/gate flow.
+  private miniChallengeBacksPuzzle: boolean = false;
   private puzzleTimer: Phaser.Time.TimerEvent | null = null;
   
   // Guidance Flags
@@ -2073,6 +2077,15 @@ export class MainScene extends Phaser.Scene {
   }
 
   public resumeGameFromNoor(isCorrect: boolean) {
+      // M3B: if this mini-challenge is standing in for an old event puzzle, route the answer to the
+      // puzzle outcome (storm/library/carpet/reward/bridge) instead of the chest/gate flow.
+      if (this.miniChallengeBacksPuzzle) {
+          this.miniChallengeBacksPuzzle = false;
+          this.activeMiniChallenge = null;
+          if (this.puzzleTimer) { this.puzzleTimer.remove(); this.puzzleTimer = null; }
+          this.resolvePuzzle(isCorrect);
+          return;
+      }
       if (isCorrect) {
           this.audioManager?.playPuzzleCorrect();
           this.cameras.main.flash(220, 255, 220, 120);
@@ -2235,11 +2248,19 @@ export class MainScene extends Phaser.Scene {
       // update() early-return below + tweens.pauseAll here stop the delta-driven cloud drift and any
       // mid-flight ambient tweens, matching the mini-challenge / fragment-modal full pause.
       this.tweens.pauseAll();
+
+      // M3B (Yahia 2026-06-04): present this encounter as a VISUAL mini-challenge instead of the old
+      // quiz card so the new challenge system is the primary experience. activePuzzle is kept for the
+      // outcome logic (resolvePuzzle); GameUI suppresses the quiz card while a mini-challenge is active.
+      this.miniChallengeBacksPuzzle = true;
+      this.activeMiniChallenge = pickMiniChallenge(this.currentStage);
       this.syncUI();
 
       if (this.puzzleTimer) this.puzzleTimer.remove();
       this.puzzleTimer = this.time.delayedCall(puzzle.timeoutMs, () => {
           if (this.activePuzzle === puzzle) {
+              this.activeMiniChallenge = null;
+              this.miniChallengeBacksPuzzle = false;
               this.resolvePuzzle(false);
           }
       });
@@ -2465,7 +2486,7 @@ export class MainScene extends Phaser.Scene {
               ease: 'Power1.out',
               onComplete: () => {
                   this.time.delayedCall(2000, () => {
-                      this.tweens.add({
+                      this.tweens.add({ 
                           targets: txt,
                           alpha: 0,
                           duration: 1200,

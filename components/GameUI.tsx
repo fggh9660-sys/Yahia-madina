@@ -140,7 +140,8 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
     <div className="font-['Cairo']" dir="rtl">
 
       {/* MINI PUZZLE OVERLAY (Storm / Library / Dual Path) */}
-      {gameState.activePuzzle && onPuzzleAnswer && (
+      {/* M3B: old quiz card is suppressed while it's being presented as a visual mini-challenge. */}
+      {gameState.activePuzzle && !gameState.activeMiniChallenge && onPuzzleAnswer && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="bg-[#1a1625]/95 border border-[#ffd700]/50 rounded-3xl px-5 py-6 w-[90%] max-w-md text-center shadow-2xl">
             <p className="text-[#ffd700] text-lg md:text-xl font-black mb-4">
