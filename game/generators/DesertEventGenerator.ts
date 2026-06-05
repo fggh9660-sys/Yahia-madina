@@ -115,7 +115,7 @@ export class DesertEventGenerator {
         });
         c.refresh();
     }
-
+    
     private static generateGlyph(scene: Phaser.Scene) {
         if (scene.textures.exists('event_glyph')) return;
         const W = 48, H = 62;
