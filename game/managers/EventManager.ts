@@ -1394,13 +1394,17 @@ export class EventManager {
       return false;
   }
 
-  private spawnChestPattern(x: number, groundY: number) {
+  private spawnChestPattern(x: number, groundY: number, forcedTheme?: ChallengeEvent) {
       this.isEncounterActive = true;
       this.encounterType = 'CHEST';
       this.isEncounterOpening = false;
       // M3B: assign this encounter a themed event, rotating so Storm/Oasis/Ruins/Caravan all appear.
-      this.encounterTheme = CHALLENGE_EVENTS[this.encounterThemeIdx % CHALLENGE_EVENTS.length];
-      this.encounterThemeIdx++;
+      // forcedTheme is used by the debug spawner so a specific event can be previewed on demand.
+      this.encounterTheme = forcedTheme ?? CHALLENGE_EVENTS[this.encounterThemeIdx % CHALLENGE_EVENTS.length];
+      if (!forcedTheme) this.encounterThemeIdx++;
+      // M3B: spawn the themed set-piece (oasis/ruins/caravan/storm) around the chest so the event reads
+      // as a real place in the world. Scrolls + freezes with everything else via the decorations group.
+      this.scene.environmentManager.roadside.spawnThemedDecoration(this.encounterTheme, x + 300, groundY);
       const onPlatform = Math.random() > 0.4;
       if (onPlatform) {
           const platY = groundY - 100;
@@ -1410,6 +1414,18 @@ export class EventManager {
           this.currentChest = new MagicChest(this.scene, x + 300, groundY - 25, true);
           this.scene.spawnManager.obstacles.add(new Obstacle(this.scene, x + 100, groundY, 'rock'));
       }
+  }
+
+  /** M3B (TEMPORARY debug/review): force-spawn a themed chest encounter just off the right edge so a
+   *  specific event (oasis/ruins/caravan/storm) can be previewed on demand. Returns false if an
+   *  encounter is already active. Exposed via window.__krSpawnChest('oasis'|'ruins'|'caravan'|'storm'). */
+  public debugSpawnThemedChest(theme: ChallengeEvent): boolean {
+      if (this.isEncounterActive) return false;
+      if (this.eventPhase !== 'NONE' && this.eventPhase !== 'INTRO_RUN') return false;
+      const groundY = getGroundY(this.scene.scale.height);
+      // chest spawns at x + 300, so place it just off the right edge to scroll in quickly.
+      this.spawnChestPattern(this.scene.scale.width - 200, groundY, theme);
+      return true;
   }
 
   public handleEncounterPause(playerX: number) {

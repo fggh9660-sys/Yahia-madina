@@ -12,6 +12,8 @@ import { RoadsideRuin } from './RoadsideRuin';
 import { BedouinTent } from './BedouinTent';
 import { AncientWell } from './AncientWell';
 import { LibraryDecor, DecorType } from './LibraryDecor';
+import { DesertEventGenerator } from '../generators/DesertEventGenerator';
+import { type ChallengeEvent } from '../data/miniChallenges';
 import { MainScene } from '../scenes/MainScene';
 
 export class RoadsideArchitecture {
@@ -346,5 +348,59 @@ export class RoadsideArchitecture {
       RoadsideRuin.generateTexture(this.scene);
       BedouinTent.generateTexture(this.scene);
       AncientWell.generateTexture(this.scene);
+      DesertEventGenerator.init(this.scene);
+  }
+
+  /**
+   * M3B (Yahia event design doc 2026-06-05) — spawn a themed set-piece for a chest encounter so the
+   * Oasis/Ruins/Caravan/Storm events read as real places in the world. Reuses existing decor (palm/
+   * well/tent/ruin) plus the new signature props (camel/lantern/flowers/glyph/sand). Everything goes
+   * into the `decorations` group, so it scrolls + culls with the world automatically and freezes during
+   * the mini-challenge (update() early-returns). Narrative rewards (Lost Book/Curiosity/Knowledge) are
+   * layered on top in M4.
+   */
+  public spawnThemedDecoration(theme: ChallengeEvent, chestX: number, groundY: number): void {
+      const y = groundY + GROUND_DECOR_Y_OFFSET;
+      const add = (obj: Phaser.GameObjects.GameObject) => this.decorations.add(obj);
+
+      // Lightweight decorative prop sprite (no physics) sitting on the ground line.
+      const prop = (key: string, px: number, depth: number, scale = 1) => {
+          const s = this.scene.add.sprite(px, y, key).setOrigin(0.5, 1).setDepth(depth).setScale(scale);
+          add(s);
+          return s;
+      };
+
+      switch (theme) {
+          case 'oasis': {
+              add(new AncientWell(this.scene, chestX - 30, y));
+              add(new CityPalm(this.scene, chestX - 200, y));
+              add(new CityPalm(this.scene, chestX + 150, y));
+              prop('event_flowers', chestX - 110, 9.6);
+              prop('event_flowers', chestX + 70, 9.6);
+              break;
+          }
+          case 'ruins': {
+              add(new RoadsideRuin(this.scene, chestX - 210, y));
+              add(new RoadsideRuin(this.scene, chestX + 120, y));
+              prop('event_glyph', chestX - 60, 9.3);
+              break;
+          }
+          case 'caravan': {
+              add(new BedouinTent(this.scene, chestX - 220, y));
+              prop('event_camel', chestX - 70, 9.0);
+              prop('event_lantern', chestX + 110, 9.6);
+              break;
+          }
+          case 'storm': {
+              add(new BedouinTent(this.scene, chestX - 120, y));
+              // Drifting sand gusts float above the ground (additive), framing the shelter.
+              const cloud1 = this.scene.add.sprite(chestX + 40, y - 150, 'event_sandcloud')
+                  .setOrigin(0.5, 0.5).setDepth(11).setBlendMode(Phaser.BlendModes.SCREEN).setAlpha(0.85);
+              const cloud2 = this.scene.add.sprite(chestX - 180, y - 90, 'event_sandcloud')
+                  .setOrigin(0.5, 0.5).setDepth(11).setBlendMode(Phaser.BlendModes.SCREEN).setAlpha(0.7).setScale(0.8);
+              add(cloud1); add(cloud2);
+              break;
+          }
+      }
   }
 }

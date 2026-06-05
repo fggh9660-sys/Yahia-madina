@@ -245,7 +245,12 @@ export class MainScene extends Phaser.Scene {
     // M3B (TEMPORARY review aid): jump straight to Stage 3 for preview without a full playthrough.
     // From the browser console: window.__krEnterStage3(). Remove before final M3B sign-off, once the
     // natural Stage 2 → 3 progression is hooked up.
-    try { (window as unknown as Record<string, unknown>).__krEnterStage3 = () => this.enterStage3(); } catch { /* ignore */ }
+    try {
+        const dbg = window as unknown as Record<string, unknown>;
+        dbg.__krEnterStage3 = () => this.enterStage3();
+        // M3B (TEMPORARY review): preview a themed event on demand, e.g. window.__krSpawnChest('oasis').
+        dbg.__krSpawnChest = (theme: string) => this.eventManager.debugSpawnThemedChest(theme as ChallengeEvent);
+    } catch { /* ignore */ }
 
     // Bugfix 2026-06-04: low-frequency stuck-state watchdog so the run can never stay frozen with no modal.
     this.time.addEvent({ delay: 1200, loop: true, callback: this.checkStuckState, callbackScope: this });
@@ -2077,6 +2082,12 @@ export class MainScene extends Phaser.Scene {
   }
 
   public resumeGameFromNoor(isCorrect: boolean) {
+      // Bugfix 2026-06-05 (Yahia "game doesn't unpause after chest puzzle"): the challenge is now
+      // answered, so lift the tween freeze that pauseGameplayForQuestion applied. Otherwise the chest/
+      // gate OPEN animation (a tween created here) can't advance, its onComplete never fires, and
+      // handlePostAnswerDelay (which resumes physics) is never reached — the world stays stuck until the
+      // watchdog force-resumes ~6s later.
+      this.tweens.resumeAll();
       // M3B: if this mini-challenge is standing in for an old event puzzle, route the answer to the
       // puzzle outcome (storm/library/carpet/reward/bridge) instead of the chest/gate flow.
       if (this.miniChallengeBacksPuzzle) {
@@ -2419,7 +2430,13 @@ export class MainScene extends Phaser.Scene {
 
   /** 0–100 from actual distance / stage length (Step 2 progress bar). */
   private getStageProgressPercent(): number {
-      if (this.currentStage >= 2 && this.cityStartDistanceForStats >= 0) {
+      // M3B: Stage 3 (Observatory) tracks its own distance so the bar resets on entry instead of
+      // staying pinned at 100% (the old `>= 2` branch wrongly swallowed Stage 3 into the Stage 2 calc).
+      if (this.currentStage >= 3) {
+          const distInObs = this.environmentManager.getObservatoryRunDistance();
+          return Math.min(100, (distInObs / PROGRESS.STAGE_3_LENGTH_M) * 100);
+      }
+      if (this.currentStage === 2 && this.cityStartDistanceForStats >= 0) {
           const distInStage = this.runDistance - this.cityStartDistanceForStats;
           return Math.min(100, (distInStage / PROGRESS.STAGE_2_LENGTH_M) * 100);
       }

@@ -24,16 +24,16 @@ export const MiniChallengeModal: React.FC<Props> = ({ challenge, onAnswer }) => 
             className="absolute inset-0 z-[60] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-300"
             dir="rtl"
         >
-            <div className="bg-gradient-to-b from-[#2a1d3a] to-[#1a1625] border-2 border-[#ffd700]/60 rounded-2xl p-5 md:p-7 max-w-md w-full shadow-[0_0_60px_rgba(255,215,0,0.25)] animate-in zoom-in-95 duration-300">
+            <div className="bg-gradient-to-b from-[#2a1d3a] to-[#1a1625] border-2 border-[#ffd700]/60 rounded-2xl p-4 md:p-5 max-w-md w-full max-h-[92vh] overflow-y-auto shadow-[0_0_60px_rgba(255,215,0,0.25)] animate-in zoom-in-95 duration-300">
                 {challenge.event && (
-                    <div className="flex items-center justify-center gap-2 mb-3">
-                        <span className="text-2xl">{EVENT_META[challenge.event].icon}</span>
-                        <span className="text-[#ffd700]/80 text-xs md:text-sm font-bold tracking-wide uppercase">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                        <span className="text-xl">{EVENT_META[challenge.event].icon}</span>
+                        <span className="text-[#ffd700]/80 text-[10px] md:text-xs font-bold tracking-wide uppercase">
                             {EVENT_META[challenge.event].label}
                         </span>
                     </div>
                 )}
-                <h3 className="text-[#ffd66b] text-lg md:text-xl font-black text-center mb-4">
+                <h3 className="text-[#ffd66b] text-base md:text-lg font-black text-center mb-3">
                     {challenge.prompt}
                 </h3>
                 {challenge.data.kind === 'COLOR_MATCH' && (
@@ -240,10 +240,11 @@ const PairMatchUI: React.FC<{ data: PairMatchData; onAnswer: (c: boolean) => voi
     };
 
     const cols = data.gridSize === 2 ? 'grid-cols-2' : 'grid-cols-3';
+    const gridMax = data.gridSize === 2 ? 'max-w-[240px]' : 'max-w-[300px]';
     return (
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-2">
             <div className="text-white/70 text-xs">ابحث عن الأزواج</div>
-            <div className={`grid ${cols} gap-2 w-full`}>
+            <div className={`grid ${cols} gap-2 w-full ${gridMax} mx-auto`}>
                 {cards.map((icon, i) => {
                     const isShown = flipped.includes(i) || matched.includes(i);
                     return (
@@ -252,7 +253,7 @@ const PairMatchUI: React.FC<{ data: PairMatchData; onAnswer: (c: boolean) => voi
                             type="button"
                             disabled={isShown || locked}
                             onClick={() => handleFlip(i)}
-                            className={`aspect-square rounded-xl flex items-center justify-center text-3xl md:text-4xl cursor-pointer touch-manipulation transition-all duration-200 ${
+                            className={`aspect-square rounded-xl flex items-center justify-center text-2xl md:text-3xl cursor-pointer touch-manipulation transition-all duration-200 ${
                                 isShown
                                     ? 'bg-[#ffd700]/15 border-2 border-[#ffd700]/60'
                                     : 'bg-white/10 border-2 border-white/20 hover:bg-white/20'
