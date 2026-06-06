@@ -2358,13 +2358,13 @@ export class MainScene extends Phaser.Scene {
       }
 
       this.eventManager.reportPuzzleResolved(isCorrect);
-      // Bugfix 2026-06-06 (Yahia "questions repeat + can't jump after event"): reportPuzzleResolved may
-      // have queued the NEXT puzzle of a storm/library sequence — a new mini-challenge is now active and
-      // already paused the world. Do NOT resume here, or we'd un-pause the world mid-sequence, which let
-      // a spurious encounter spawn during the event and broke the event's terminal chain (leaving
-      // player.isScripted stuck = run-but-can't-jump). Only resume when the sequence has actually ended;
-      // the terminal event path (resumeRunFromShelter / resumeRunInLibrary) clears isScripted + eventPhase.
-      if (!this.activeMiniChallenge && !this.activePuzzle) {
+      // Bugfix 2026-06-06/07 (Yahia "questions repeat + can't jump / Library freeze"): the next puzzle of
+      // a storm/library sequence is queued via delayedCall, so checking activeMiniChallenge alone is too
+      // early — it's still null during the inter-puzzle delay. Also check isPuzzleSequenceActive() so we
+      // do NOT resume mid-sequence (which let the run scroll into the library-end/another encounter and
+      // broke the terminal chain -> freeze). Only resume once the sequence has actually ended; the
+      // terminal path (resumeRunFromShelter / resumeRunInLibrary) clears isScripted + eventPhase.
+      if (!this.activeMiniChallenge && !this.activePuzzle && !this.eventManager.isPuzzleSequenceActive()) {
           this.physics.resume();
           this.player.anims.resume();
           this.speedModifier = 1.0;

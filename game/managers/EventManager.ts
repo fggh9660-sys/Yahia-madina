@@ -1281,6 +1281,14 @@ export class EventManager {
   }
 
   /** Called by MainScene after any puzzle is resolved; advances storm/library sequence or no-op. */
+  /** M3B fix (2026-06-07): true while a storm/library puzzle SEQUENCE is still running (the next puzzle
+   *  is queued via delayedCall, not yet shown). resolvePuzzle uses this so it doesn't resume the run
+   *  mid-sequence during the inter-puzzle delay — that mid-sequence resume let the run scroll into the
+   *  library-end / another encounter and broke the sequence, freezing the game after the Library event. */
+  public isPuzzleSequenceActive(): boolean {
+      return this.stormPuzzleQueue.length > 0 || this.libraryPuzzleSequenceActive;
+  }
+
   public reportPuzzleResolved(isCorrect: boolean) {
       if (this.stormPuzzleQueue.length > 0 && this.eventPhase === 'SANDSTORM_SHELTER') {
           this.stormPuzzleIndex++;
