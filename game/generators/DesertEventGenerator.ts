@@ -147,7 +147,7 @@ export class DesertEventGenerator {
         if (!c) return;
         const ctx = c.context;
         // Soft layered sand gusts
-        const tint = ['rgba(206,170,90,0.22)', 'rgba(176,140,70,0.18)', 'rgba(230,200,140,0.16)'];
+        const tint = ['rgba(206,170,90,0.22)', 'rgba(176,140,70,0.18)', 'rgba(230,200,140,0.16)'];  
         for (let i = 0; i < 26; i++) {
             ctx.fillStyle = tint[i % tint.length];
             const x = Math.random() * W, y = Math.random() * H;

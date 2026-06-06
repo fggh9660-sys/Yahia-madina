@@ -152,6 +152,8 @@ export class MainScene extends Phaser.Scene {
   // active mini-challenge is backing an ActivePuzzle and its answer routes to resolvePuzzle (outcome),
   // not the chest/gate flow.
   private miniChallengeBacksPuzzle: boolean = false;
+  // M3B: last challenge id shown for a puzzle, so a storm/library sequence doesn't repeat the same one.
+  private lastPuzzleChallengeId: string | null = null;
   private puzzleTimer: Phaser.Time.TimerEvent | null = null;
   
   // Guidance Flags
@@ -2264,7 +2266,13 @@ export class MainScene extends Phaser.Scene {
       // quiz card so the new challenge system is the primary experience. activePuzzle is kept for the
       // outcome logic (resolvePuzzle); GameUI suppresses the quiz card while a mini-challenge is active.
       this.miniChallengeBacksPuzzle = true;
-      this.activeMiniChallenge = pickMiniChallenge(this.currentStage);
+      // Avoid repeating the same challenge across a storm/library sequence (re-roll once if identical).
+      let mc = pickMiniChallenge(this.currentStage);
+      if (this.lastPuzzleChallengeId && mc.id === this.lastPuzzleChallengeId) {
+          mc = pickMiniChallenge(this.currentStage);
+      }
+      this.lastPuzzleChallengeId = mc.id;
+      this.activeMiniChallenge = mc;
       this.syncUI();
 
       if (this.puzzleTimer) this.puzzleTimer.remove();
@@ -2350,10 +2358,18 @@ export class MainScene extends Phaser.Scene {
       }
 
       this.eventManager.reportPuzzleResolved(isCorrect);
-      this.physics.resume();
-      this.player.anims.resume();
-      this.speedModifier = 1.0;
-      this.tweens.resumeAll();
+      // Bugfix 2026-06-06 (Yahia "questions repeat + can't jump after event"): reportPuzzleResolved may
+      // have queued the NEXT puzzle of a storm/library sequence — a new mini-challenge is now active and
+      // already paused the world. Do NOT resume here, or we'd un-pause the world mid-sequence, which let
+      // a spurious encounter spawn during the event and broke the event's terminal chain (leaving
+      // player.isScripted stuck = run-but-can't-jump). Only resume when the sequence has actually ended;
+      // the terminal event path (resumeRunFromShelter / resumeRunInLibrary) clears isScripted + eventPhase.
+      if (!this.activeMiniChallenge && !this.activePuzzle) {
+          this.physics.resume();
+          this.player.anims.resume();
+          this.speedModifier = 1.0;
+          this.tweens.resumeAll();
+      }
       this.syncUI();
   }
 
