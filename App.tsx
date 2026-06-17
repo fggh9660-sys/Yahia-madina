@@ -127,7 +127,9 @@ function App() {
         activeFragmentLore: 'activeFragmentLore' in d ? (d.activeFragmentLore as GameState['activeFragmentLore']) : prev.activeFragmentLore,
         activeMiniChallenge: 'activeMiniChallenge' in d ? (d.activeMiniChallenge as GameState['activeMiniChallenge']) : prev.activeMiniChallenge,
         collection: 'collection' in d ? (d.collection as GameState['collection']) : prev.collection,
-        activeColorChoice: 'activeColorChoice' in d ? (d.activeColorChoice as boolean) : prev.activeColorChoice
+        activeColorChoice: 'activeColorChoice' in d ? (d.activeColorChoice as boolean) : prev.activeColorChoice,
+        activeLostBookPage: 'activeLostBookPage' in d ? (d.activeLostBookPage as GameState['activeLostBookPage']) : prev.activeLostBookPage,
+        m4: 'm4' in d ? (d.m4 as GameState['m4']) : prev.m4
       }));
     });
 
@@ -497,6 +499,15 @@ function App() {
     }
   };
 
+  // M4: complete a Lost Book page discovery (restore the page) and resume gameplay.
+  const handleLostBookPageComplete = () => {
+    playUIButton();
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
+      scene?.completeLostBookPage?.();
+    }
+  };
+
   // M3A: Book of Noor open/close — pause/resume gameplay so player can read safely.
   const handleBookOfNoorOpen = () => {
     playUIButton();
@@ -634,6 +645,7 @@ function App() {
             onFragmentLoreDismiss={handleFragmentLoreDismiss}
             onBookOfNoorOpen={handleBookOfNoorOpen}
             onBookOfNoorClose={handleBookOfNoorClose}
+            onLostBookPageComplete={handleLostBookPageComplete}
           />
           {gameState.stageResults && (
             <StageResultsUI

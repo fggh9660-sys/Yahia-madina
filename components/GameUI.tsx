@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GameState } from '../types';
 import { MiniChallengeModal } from './MiniChallengeModal';
 import { BookOfNoorModal } from './BookOfNoorModal';
+import { LostBookPageModal } from './LostBookPageModal';
 
 interface GameUIProps {
   gameState: GameState;
@@ -20,9 +21,10 @@ interface GameUIProps {
   onFragmentLoreDismiss?: () => void;
   onBookOfNoorOpen?: () => void;
   onBookOfNoorClose?: () => void;
+  onLostBookPageComplete?: () => void;
 }
 
-export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick, onChangeColorClick, onFragmentLoreDismiss, onBookOfNoorOpen, onBookOfNoorClose }) => {
+export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick, onChangeColorClick, onFragmentLoreDismiss, onBookOfNoorOpen, onBookOfNoorClose, onLostBookPageComplete }) => {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
   const [showBookOfNoor, setShowBookOfNoor] = useState(false);
@@ -232,6 +234,14 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                   onBookOfNoorClose?.();
               }}
           />
+      )}
+
+      {/* M4: LOST BOOK PAGE DISCOVERY MODAL — curiosity → reveal → knowledge + visual. Full pause. */}
+      {gameState.activeLostBookPage && (
+        <LostBookPageModal
+          page={gameState.activeLostBookPage}
+          onComplete={() => onLostBookPageComplete?.()}
+        />
       )}
 
       {/* M2-R1: KNOWLEDGE FRAGMENT LORE MODAL — full pause, dark/blur bg, centered card, tap ANYWHERE to continue */}

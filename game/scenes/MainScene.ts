@@ -11,6 +11,14 @@ import { pickNoorLine } from '../../data/noorLines';
 import { pickMiniChallenge, findMiniChallenge, pickMiniChallengeByEvent, type ChallengeEvent } from '../data/miniChallenges';
 import { getCollectedCount, getTotalPossible, getCompletionPercent } from '../../data/collectionState';
 import { hasSeenColorDiscovery, markColorDiscoverySeen } from '../../data/playerColor';
+import { LostBookPageView, M4Snapshot } from '../../types';
+import { pickNextPage, findPage, getTotalPages, isChapterComplete, getChapters } from '../../data/lostBook';
+import {
+    restorePage, markCuriosityAsked, isPageRestored, isCuriosityPending,
+    getRestoredPageCount, getRestoredPageIds, setNoorBeatSeen,
+    unlockAchievement, getUnlockedAchievementIds, resetProgress,
+} from '../../data/progress';
+import { evaluateAchievements, findAchievement, getTotalAchievements } from '../../data/achievements';
 
 // Objects for Texture Generation
 import { Star } from '../objects/Star';
@@ -109,6 +117,12 @@ export class MainScene extends Phaser.Scene {
   private activeQuestion: Question | null = null;
   // M2-R1: active fragment lore modal — when set, gameplay is paused and GameUI shows the lore card.
   private activeFragmentLore: { id: string; title: string; body: string; isRare?: boolean } | null = null;
+  // M4: active Lost Book page discovery modal (curiosity → knowledge). Freezes the world like the lore card.
+  private activeLostBookPage: LostBookPageView | null = null;
+  // M4: page ids already offered this run, so a single run won't re-surface the same page mid-session.
+  private pageOfferedThisRun: string[] = [];
+  // M4: long-term progression snapshot pushed to the HUD + Library hub.
+  private m4Snapshot: M4Snapshot = { pagesRestored: 0, totalPages: 0, chaptersComplete: 0, achievementsUnlocked: 0 };
   // M3A: active mini-challenge modal — replaces legacy activeQuestion popup flow.
   private activeMiniChallenge: import('../data/miniChallenges').MiniChallenge | null = null;
   // M3A-R1: in-game Noor color-discovery moment (relocated from the pre-gameplay setup screen per
@@ -252,6 +266,10 @@ export class MainScene extends Phaser.Scene {
         dbg.__krEnterStage3 = () => this.enterStage3();
         // M3B (TEMPORARY review): preview a themed event on demand, e.g. window.__krSpawnChest('oasis').
         dbg.__krSpawnChest = (theme: string) => this.eventManager.debugSpawnThemedChest(theme as ChallengeEvent);
+        // M4 (TEMPORARY review aids): open a Lost Book page on demand, and reset all M4 progress.
+        // From the console: window.__krLostBookPage()  /  window.__krResetProgress().
+        dbg.__krLostBookPage = () => this.showLostBookPage();
+        dbg.__krResetProgress = () => { resetProgress(); this.refreshM4Snapshot(); this.syncUI(); return 'M4 progress reset'; };
     } catch { /* ignore */ }
 
     // Bugfix 2026-06-04: low-frequency stuck-state watchdog so the run can never stay frozen with no modal.
@@ -518,6 +536,10 @@ export class MainScene extends Phaser.Scene {
     // M3A: initialize HUD collection snapshot from persistent store so the chip shows progress
     // from prior runs as soon as gameplay starts.
     this.collectionSnapshot = { collected: getCollectedCount(), total: getTotalPossible(), percent: getCompletionPercent() };
+    // M4: reset per-run page offers + refresh the persistent progression snapshot.
+    this.activeLostBookPage = null;
+    this.pageOfferedThisRun = [];
+    this.refreshM4Snapshot();
 
     this.guideFlags = { welcome: false, firstJump: false, firstGate: false };
     this.firstObstacleRef = null;
@@ -543,6 +565,8 @@ export class MainScene extends Phaser.Scene {
     // M2-R3: full pause when lore card open — skip the entire update so bg/spawn/event/ambient
     // managers don't run. Combined with tweens.pauseAll() in showFragmentLore, the world freezes.
     if (this.activeFragmentLore) return;
+    // M4: same full-pause treatment while the Lost Book page discovery modal is open.
+    if (this.activeLostBookPage) return;
     // M3A-R1: same full-pause treatment while the color-discovery picker is open.
     if (this.activeColorChoice) return;
     // M3A-R1c: hold the freeze through Noor's brief acknowledgment beat after the choice.
@@ -1973,6 +1997,115 @@ export class MainScene extends Phaser.Scene {
       this.syncUI();
   }
 
+  // ── M4: Lost Book page discovery ───────────────────────────────────────────
+
+  /**
+   * M4: try to surface the next Lost Book page (the curiosity→knowledge loop). Returns true if a page
+   * was opened. Falls back to the legacy lore card (returns false) when every page is already restored,
+   * so rare pickups never feel empty late-game.
+   *
+   * Freezes the world exactly like showFragmentLore. The page is RESTORED on completeLostBookPage().
+   */
+  public showLostBookPage(): boolean {
+      if (this.activeLostBookPage || this.activeFragmentLore || this.activeQuestion || this.isPausedMenu || this.isGameOver) {
+          return false;
+      }
+      const page = pickNextPage(this.currentStage, isPageRestored, isCuriosityPending, this.pageOfferedThisRun);
+      if (!page) return false; // nothing left — caller can fall back to lore
+
+      this.pageOfferedThisRun.push(page.id);
+      markCuriosityAsked(page.id);
+      this.activeLostBookPage = {
+          id: page.id, chapter: page.chapter, page: page.page,
+          story: page.story, curiosity: page.curiosity, knowledge: page.knowledge,
+          visual: page.visual, extra: page.extra, noorComment: page.noorComment, mystery: page.mystery,
+      };
+
+      this.speedModifier = 0;
+      this.player.anims.pause();
+      if (this.physics.world.isPaused === false) this.physics.pause();
+      this.tweens.pauseAll();
+
+      // Noor flags the curiosity moment (kept light — her per-page reflection shows inside the modal).
+      const line = pickNoorLine('lost_book_page');
+      if (line) this.showNoorMessage(line.text, false, line.tone);
+
+      this.syncUI();
+      return true;
+  }
+
+  /**
+   * M4: called from GameUI when the player finishes a page ("أضف إلى الكتاب"). Restores the page,
+   * fires achievement + chapter-completion side effects, then resumes gameplay.
+   */
+  public completeLostBookPage() {
+      const view = this.activeLostBookPage;
+      if (!view) return;
+      this.activeLostBookPage = null;
+
+      const newlyRestored = restorePage(view.id);
+      if (newlyRestored) {
+          this.addScore(30);
+          this.showFloatingText(this.player.x, this.player.y - 120, '📖 صفحة جديدة!', '#ffd66b');
+          this.audioManager?.playStarPitched(1400);
+          this.checkChapterCompletion(view.chapter);
+          this.checkAchievements();
+      }
+      this.refreshM4Snapshot();
+
+      if (this.physics.world.isPaused) this.physics.resume();
+      this.player.anims.resume();
+      this.speedModifier = 1.0;
+      this.tweens.resumeAll();
+      this.syncUI();
+  }
+
+  /** M4: when a chapter's last page is restored, fire Noor's cliffhanger beat. */
+  private checkChapterCompletion(chapter: number) {
+      if (!isChapterComplete(chapter, isPageRestored)) return;
+      setNoorBeatSeen(chapter); // advance the narrative chain
+      const line = pickNoorLine('lost_book_chapter_complete');
+      if (line) {
+          // brief delay so the "new page" floating text reads first
+          this.time.delayedCall(700, () => this.showNoorMessage(line.text, false, line.tone));
+      }
+  }
+
+  /** M4: unlock any newly-earned achievements and toast each one. */
+  private checkAchievements() {
+      const restoredIds = getRestoredPageIds();
+      const chaptersComplete = getChapters().filter(c => isChapterComplete(c.chapter, isPageRestored)).length;
+      const restoredMajorMystery = restoredIds.some(id => findPage(id)?.mystery === 'major');
+      const ctx = { pagesRestored: getRestoredPageCount(), chaptersComplete, restoredMajorMystery };
+
+      const already = new Set(getUnlockedAchievementIds());
+      const earned = evaluateAchievements(ctx);
+      let delay = 1100;
+      for (const id of earned) {
+          if (already.has(id)) continue;
+          if (!unlockAchievement(id)) continue;
+          const ach = findAchievement(id);
+          if (!ach) continue;
+          // stagger toasts so multiple unlocks don't overlap
+          this.time.delayedCall(delay, () => {
+              this.showFloatingText(this.player.x, this.player.y - 150, `${ach.icon} ${ach.title}`, '#ffd700');
+              this.audioManager?.playStarPitched(1700);
+          });
+          delay += 900;
+      }
+  }
+
+  /** M4: recompute the progression snapshot from persistent storage. */
+  private refreshM4Snapshot() {
+      const chaptersComplete = getChapters().filter(c => isChapterComplete(c.chapter, isPageRestored)).length;
+      this.m4Snapshot = {
+          pagesRestored: getRestoredPageCount(),
+          totalPages: getTotalPages(),
+          chaptersComplete,
+          achievementsUnlocked: getUnlockedAchievementIds().filter(id => findAchievement(id)).length,
+      };
+  }
+
   public showFloatingText(x: number, y: number, text: string, color: string = '#ffd700') {
       const txt = this.add.text(x, y, text, {
           fontFamily: 'Cairo', fontSize: '24px', fontStyle: 'bold', color: color, stroke: '#000', strokeThickness: 3
@@ -2397,6 +2530,8 @@ export class MainScene extends Phaser.Scene {
           activeMiniChallenge: this.activeMiniChallenge,
           collection: this.collectionSnapshot,
           activeColorChoice: this.activeColorChoice,
+          activeLostBookPage: this.activeLostBookPage,
+          m4: this.m4Snapshot,
       });
   }
 

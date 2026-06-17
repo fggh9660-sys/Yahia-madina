@@ -68,6 +68,32 @@ export interface GameState {
   collection?: { collected: number; total: number; percent: number };
   /** M3A-R1: true while the in-game Noor color-discovery moment is open (relocated from pre-gameplay setup). */
   activeColorChoice?: boolean;
+  /** M4: active Lost Book page discovery modal (curiosity → reveal → knowledge + visual). null when none. */
+  activeLostBookPage?: LostBookPageView | null;
+  /** M4: live long-term progression snapshot for the HUD + Library hub. */
+  m4?: M4Snapshot | null;
+}
+
+/** M4: the page data React needs to render the discovery modal (subset of LostBookPage). */
+export interface LostBookPageView {
+  id: string;
+  chapter: number;
+  page: number;
+  story: string;
+  curiosity: string;
+  knowledge: string;
+  visual: string;
+  extra?: string;
+  noorComment: string;
+  mystery: 'small' | 'medium' | 'major';
+}
+
+/** M4: progression numbers surfaced to the UI. */
+export interface M4Snapshot {
+  pagesRestored: number;
+  totalPages: number;
+  chaptersComplete: number;
+  achievementsUnlocked: number;
 }
 
 export interface Question {

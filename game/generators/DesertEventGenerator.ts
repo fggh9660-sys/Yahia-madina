@@ -67,22 +67,27 @@ export class DesertEventGenerator {
         if (!c) return;
         const ctx = c.context;
         const cx = 15;
+
         // Pole
         ctx.fillStyle = '#5d4037'; ctx.fillRect(cx - 2, 22, 4, H - 22);
         ctx.fillStyle = '#4e342e'; ctx.fillRect(cx - 4, H - 6, 8, 5);
+
         // Hook arm
         ctx.strokeStyle = '#5d4037'; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.moveTo(cx, 22); ctx.lineTo(cx, 12); ctx.lineTo(cx + 8, 12); ctx.stroke();
+
         // Lantern body
         ctx.fillStyle = '#caa24a';
         ctx.beginPath(); ctx.moveTo(cx + 2, 16); ctx.lineTo(cx + 14, 16);
         ctx.lineTo(cx + 12, 34); ctx.lineTo(cx + 4, 34); ctx.fill();
+
         // Glow
         ctx.save();
         ctx.shadowBlur = 12; ctx.shadowColor = '#ffd86b';
         ctx.fillStyle = 'rgba(255,216,107,0.9)';
         ctx.fillRect(cx + 5, 20, 6, 10);
         ctx.restore();
+        
         // Cap
         ctx.fillStyle = '#8a6d2f'; ctx.fillRect(cx + 1, 13, 14, 4);
         c.refresh();

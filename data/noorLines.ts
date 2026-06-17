@@ -13,6 +13,8 @@
  *  - `near_miss`           — fired when narrowly avoiding an obstacle (already wired separately)
  *  - `color_discovery`     — fired mid-run when Noor invites the player to choose their scarf color
  *  - `color_chosen`        — fired right after the player commits a color (Noor's closing beat)
+ *  - `lost_book_page`      — M4: fired when the player uncovers a Lost Book page (curiosity moment)
+ *  - `lost_book_chapter_complete` — M4: fired when a whole chapter is restored (cliffhanger beat)
  */
 
 export type NoorCue =
@@ -23,7 +25,9 @@ export type NoorCue =
     | 'rare_fragment_discovery'
     | 'lost_book_intro'
     | 'color_discovery'
-    | 'color_chosen';
+    | 'color_chosen'
+    | 'lost_book_page'
+    | 'lost_book_chapter_complete';
 
 type NoorLine = { text: string; tone: 'encourage' | 'warning' | 'success' | 'greet' };
 
@@ -63,6 +67,15 @@ const LINES: Record<NoorCue, NoorLine[]> = {
         { text: 'اختيار جميل! ليكن هذا اللون رفيقك على الطريق. هيا نواصل رحلتنا.', tone: 'success' },
         { text: 'رائع… أرى أن قلبك قد اختار. سيرافقك هذا النور أينما ذهبت.', tone: 'success' },
         { text: 'الآن أصبحت رحلتك تحمل لونك الخاص. لنُكمل إلى الأمام!', tone: 'success' },
+    ],
+    lost_book_page: [
+        { text: 'انظر! صفحة من الكتاب المفقود… لنكتشف سرّها معاً.', tone: 'greet' },
+        { text: 'لقد لاحت صفحة جديدة. أشعر أنها تحمل سؤالاً يستحق الإجابة.', tone: 'greet' },
+        { text: 'صفحة أخرى من الكتاب! كل صفحة تقرّبنا من الحقيقة.', tone: 'greet' },
+    ],
+    lost_book_chapter_complete: [
+        { text: 'لقد أتممنا فصلاً كاملاً من الكتاب المفقود! لكن السرّ الأكبر ما زال ينتظرنا في الأمام…', tone: 'success' },
+        { text: 'فصلٌ اكتمل، وقصةٌ تتّضح شيئاً فشيئاً. إلى أين ستقودنا الصفحات التالية؟', tone: 'success' },
     ],
 };
 
