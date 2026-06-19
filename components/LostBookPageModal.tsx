@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { LostBookPageView } from '../types';
 
 interface Props {
     page: LostBookPageView;
+    /** KNOWLEDGE beat — "add to book": restores the page. */
     onComplete: () => void;
+    /** CURIOSITY beat — "let's search for the answer": closes the card, question stays open. */
+    onContinue: () => void;
 }
 
 const MYSTERY_BADGE: Record<LostBookPageView['mystery'], { label: string; color: string }> = {
@@ -13,20 +16,21 @@ const MYSTERY_BADGE: Record<LostBookPageView['mystery'], { label: string; color:
 };
 
 /**
- * M4: Lost Book page discovery modal — the core curiosity→knowledge loop.
+ * M4: Lost Book discovery modal — the curiosity→knowledge loop, now split into TWO separate beats
+ * (Yahia 2026-06-19). The same page surfaces twice, on different pickups:
  *
- * Flow (full pause; gameplay frozen by MainScene while this is open):
- *   1. CURIOSITY — the question is shown first, creating the urge to discover.
- *   2. REVEAL    — player taps "اكتشف الإجابة" to flip the page.
- *   3. KNOWLEDGE — the answer + a contextual VISUAL (illustration placeholder) + optional extra note
- *                  + Noor's reflection. Then "أضف إلى الكتاب" restores the page.
+ *   mode === 'curiosity' → CURIOSITY FRAGMENT: shows ONLY the question + a prompt that the answer is
+ *                          still out there. Tapping "let's search" keeps playing (question stays open).
+ *   mode === 'knowledge' → KNOWLEDGE FRAGMENT: found on a LATER pickup. Shows the answer + a contextual
+ *                          VISUAL + Noor's reflection. Tapping "add to book" restores the page.
  *
- * The `visual` is a placeholder (emoji) — the framework reserves the slot; final illustrations are
- * Yahia's deliverable. Swap the emoji render for an <img src=...> once assets land.
+ * The delay between the two is the point: it creates curiosity and a reason to keep running.
+ * The `visual` is a placeholder (emoji) — final illustrations are Yahia's deliverable; swap the emoji
+ * render for an <img src=...> once assets land.
  */
-export const LostBookPageModal: React.FC<Props> = ({ page, onComplete }) => {
-    const [revealed, setRevealed] = useState(false);
+export const LostBookPageModal: React.FC<Props> = ({ page, onComplete, onContinue }) => {
     const badge = MYSTERY_BADGE[page.mystery];
+    const isCuriosity = page.mode === 'curiosity';
 
     return (
         <div
@@ -48,26 +52,30 @@ export const LostBookPageModal: React.FC<Props> = ({ page, onComplete }) => {
                     </span>
                 </div>
 
-                <div className="text-3xl mb-3">📖</div>
+                <div className="text-3xl mb-3">{isCuriosity ? '❔' : '📖'}</div>
 
-                {!revealed ? (
+                {isCuriosity ? (
                     <>
-                        {/* CURIOSITY — question first */}
-                        <div className="text-[#ffd66b] text-sm font-bold mb-2 tracking-wide">سؤال فضول</div>
-                        <h3 className="text-white text-lg md:text-xl font-black mb-6 leading-snug">
+                        {/* CURIOSITY FRAGMENT — question only; the answer is still out there. */}
+                        <div className="text-[#ffd66b] text-sm font-bold mb-2 tracking-wide">جذاذة فضول</div>
+                        <h3 className="text-white text-lg md:text-xl font-black mb-5 leading-snug">
                             {page.curiosity}
                         </h3>
+                        <p className="text-white/70 text-sm leading-relaxed mb-6">
+                            لم نجد الإجابة بعد… لنواصل الركض ونبحث عنها في الطريق.
+                        </p>
                         <button
                             type="button"
-                            onClick={() => setRevealed(true)}
+                            onClick={onContinue}
                             className="px-7 py-2.5 rounded-full bg-[#ffd700] hover:bg-[#ffe34d] text-slate-900 font-black text-sm shadow-lg shadow-amber-500/30 transition transform hover:-translate-y-0.5 cursor-pointer touch-manipulation"
                         >
-                            اكتشف الإجابة ✨
+                            لنبحث عن الإجابة ✨
                         </button>
                     </>
                 ) : (
                     <>
-                        {/* KNOWLEDGE — the reward: answer + visual + extra + Noor reflection */}
+                        {/* KNOWLEDGE FRAGMENT — the reward, found later: answer + visual + Noor reflection. */}
+                        <div className="text-[#4dd0ff]/80 text-xs font-bold mb-1 tracking-wide">وجدنا الإجابة!</div>
                         <div className="text-[#4dd0ff] text-sm font-bold mb-2 tracking-wide">المعرفة</div>
                         <p className="text-white text-lg md:text-xl font-black mb-3 leading-snug">
                             {page.knowledge}

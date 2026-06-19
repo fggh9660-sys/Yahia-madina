@@ -499,12 +499,21 @@ function App() {
     }
   };
 
-  // M4: complete a Lost Book page discovery (restore the page) and resume gameplay.
+  // M4: KNOWLEDGE beat — "add to book": restore the page and resume gameplay.
   const handleLostBookPageComplete = () => {
     playUIButton();
     if (gameRef.current) {
       const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
       scene?.completeLostBookPage?.();
+    }
+  };
+
+  // M4-R1: CURIOSITY beat — "let's search": close the card, keep the question open, resume gameplay.
+  const handleLostBookPageContinue = () => {
+    playUIButton();
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
+      scene?.dismissLostBookPage?.();
     }
   };
 
@@ -646,6 +655,7 @@ function App() {
             onBookOfNoorOpen={handleBookOfNoorOpen}
             onBookOfNoorClose={handleBookOfNoorClose}
             onLostBookPageComplete={handleLostBookPageComplete}
+            onLostBookPageContinue={handleLostBookPageContinue}
           />
           {gameState.stageResults && (
             <StageResultsUI

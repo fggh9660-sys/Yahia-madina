@@ -22,9 +22,10 @@ interface GameUIProps {
   onBookOfNoorOpen?: () => void;
   onBookOfNoorClose?: () => void;
   onLostBookPageComplete?: () => void;
+  onLostBookPageContinue?: () => void;
 }
 
-export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick, onChangeColorClick, onFragmentLoreDismiss, onBookOfNoorOpen, onBookOfNoorClose, onLostBookPageComplete }) => {
+export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick, onChangeColorClick, onFragmentLoreDismiss, onBookOfNoorOpen, onBookOfNoorClose, onLostBookPageComplete, onLostBookPageContinue }) => {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
   const [showBookOfNoor, setShowBookOfNoor] = useState(false);
@@ -236,11 +237,13 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
           />
       )}
 
-      {/* M4: LOST BOOK PAGE DISCOVERY MODAL — curiosity → reveal → knowledge + visual. Full pause. */}
+      {/* M4-R1: LOST BOOK DISCOVERY MODAL — curiosity question now and knowledge answer on a later
+          pickup (two separate beats). Full pause. */}
       {gameState.activeLostBookPage && (
         <LostBookPageModal
           page={gameState.activeLostBookPage}
           onComplete={() => onLostBookPageComplete?.()}
+          onContinue={() => onLostBookPageContinue?.()}
         />
       )}
 

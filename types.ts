@@ -86,6 +86,12 @@ export interface LostBookPageView {
   extra?: string;
   noorComment: string;
   mystery: 'small' | 'medium' | 'major';
+  /**
+   * M4-R1: which beat of the curiosity→knowledge loop this modal is showing.
+   *  - 'curiosity' = the question only (answer not yet found — keep playing).
+   *  - 'knowledge' = the answer + visual, surfaced on a LATER pickup once the curiosity has aged.
+   */
+  mode: 'curiosity' | 'knowledge';
 }
 
 /** M4: progression numbers surfaced to the UI. */

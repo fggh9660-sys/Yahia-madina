@@ -12,9 +12,9 @@ import { pickMiniChallenge, findMiniChallenge, pickMiniChallengeByEvent, type Ch
 import { getCollectedCount, getTotalPossible, getCompletionPercent } from '../../data/collectionState';
 import { hasSeenColorDiscovery, markColorDiscoverySeen } from '../../data/playerColor';
 import { LostBookPageView, M4Snapshot } from '../../types';
-import { pickNextPage, findPage, getTotalPages, isChapterComplete, getChapters } from '../../data/lostBook';
+import { pickNextPage, findPage, getTotalPages, isChapterComplete, getChapters, LostBookPage } from '../../data/lostBook';
 import {
-    restorePage, markCuriosityAsked, isPageRestored, isCuriosityPending,
+    restorePage, markCuriosityAsked, isPageRestored, isCuriosityPending, getPendingCuriosityIds,
     getRestoredPageCount, getRestoredPageIds, setNoorBeatSeen,
     unlockAchievement, getUnlockedAchievementIds, resetProgress,
 } from '../../data/progress';
@@ -121,6 +121,11 @@ export class MainScene extends Phaser.Scene {
   private activeLostBookPage: LostBookPageView | null = null;
   // M4: page ids already offered this run, so a single run won't re-surface the same page mid-session.
   private pageOfferedThisRun: string[] = [];
+  // M4-R1: curiosity questions ASKED this run → the runDistance (m) at which each was asked. Drives the
+  // "answer appears later" gate: a curiosity is only answered once the player has run far enough since
+  // asking it. Pending curiosities NOT in this map were asked in a PRIOR run/session → already "waited",
+  // so they are ripe to answer immediately. Reset each run (in create()).
+  private curiosityAskedThisRun: Map<string, number> = new Map();
   // M4: long-term progression snapshot pushed to the HUD + Library hub.
   private m4Snapshot: M4Snapshot = { pagesRestored: 0, totalPages: 0, chaptersComplete: 0, achievementsUnlocked: 0 };
   // M3A: active mini-challenge modal — replaces legacy activeQuestion popup flow.
@@ -539,6 +544,7 @@ export class MainScene extends Phaser.Scene {
     // M4: reset per-run page offers + refresh the persistent progression snapshot.
     this.activeLostBookPage = null;
     this.pageOfferedThisRun = [];
+    this.curiosityAskedThisRun.clear();
     this.refreshM4Snapshot();
 
     this.guideFlags = { welcome: false, firstJump: false, firstGate: false };
@@ -2000,25 +2006,68 @@ export class MainScene extends Phaser.Scene {
   // ── M4: Lost Book page discovery ───────────────────────────────────────────
 
   /**
-   * M4: try to surface the next Lost Book page (the curiosity→knowledge loop). Returns true if a page
-   * was opened. Falls back to the legacy lore card (returns false) when every page is already restored,
-   * so rare pickups never feel empty late-game.
-   *
-   * Freezes the world exactly like showFragmentLore. The page is RESTORED on completeLostBookPage().
+   * M4-R1: minimum run-distance (metres) the player must cover AFTER finding a Curiosity Fragment
+   * before its Knowledge answer is allowed to surface. This is what turns the loop into
+   * "question → keep running → discover the answer later" instead of question→immediate-answer
+   * (Yahia 2026-06-19). Pickups spawn ~every 200m, so this lands the answer ~1–2 pickups later.
+   */
+  private static readonly KNOWLEDGE_MIN_DISTANCE = 300;
+
+  /**
+   * M4: surface the Lost Book loop on a discovery pickup. The curiosity (question) and knowledge
+   * (answer) are now TWO SEPARATE BEATS (Yahia 2026-06-19):
+   *   1. If a previously-asked curiosity has aged enough → open its KNOWLEDGE answer (and it gets
+   *      restored on completeLostBookPage()).
+   *   2. Otherwise open a NEW CURIOSITY question only — the answer is found on a later pickup.
+   * Returns true if a modal was opened; false (nothing ripe + nothing new) lets the caller fall back
+   * to the legacy lore card so rare pickups never feel empty. Freezes the world like showFragmentLore.
    */
   public showLostBookPage(): boolean {
       if (this.activeLostBookPage || this.activeFragmentLore || this.activeQuestion || this.isPausedMenu || this.isGameOver) {
           return false;
       }
+
+      // (1) Prefer paying off a curiosity the player has already searched for → the KNOWLEDGE beat.
+      const ripeId = this.pickRipePendingCuriosity();
+      if (ripeId) {
+          const ripePage = findPage(ripeId);
+          if (ripePage) { this.openLostBookPage(ripePage, 'knowledge'); return true; }
+      }
+
+      // (2) Otherwise plant a NEW curiosity question — its answer surfaces on a later pickup.
       const page = pickNextPage(this.currentStage, isPageRestored, isCuriosityPending, this.pageOfferedThisRun);
-      if (!page) return false; // nothing left — caller can fall back to lore
+      if (!page) return false; // nothing new to ask and nothing ripe to answer — caller falls back to lore
 
       this.pageOfferedThisRun.push(page.id);
       markCuriosityAsked(page.id);
+      this.curiosityAskedThisRun.set(page.id, this.runDistance);
+      this.openLostBookPage(page, 'curiosity');
+      return true;
+  }
+
+  /**
+   * M4-R1: pick a pending curiosity whose answer is allowed to surface now. Ripe = either asked in a
+   * PRIOR run/session (not in curiosityAskedThisRun → the player has already "kept going"), or asked
+   * this run and the player has since run at least KNOWLEDGE_MIN_DISTANCE. Returns the oldest such id
+   * (getPendingCuriosityIds preserves ask order) so questions are answered in the order they appeared.
+   */
+  private pickRipePendingCuriosity(): string | null {
+      for (const id of getPendingCuriosityIds()) {
+          if (!findPage(id)) continue; // content removed — skip
+          const askedAt = this.curiosityAskedThisRun.get(id);
+          const ripe = askedAt === undefined || (this.runDistance - askedAt) >= MainScene.KNOWLEDGE_MIN_DISTANCE;
+          if (ripe) return id;
+      }
+      return null;
+  }
+
+  /** M4-R1: build the modal view + freeze the world for either loop beat. */
+  private openLostBookPage(page: LostBookPage, mode: 'curiosity' | 'knowledge') {
       this.activeLostBookPage = {
           id: page.id, chapter: page.chapter, page: page.page,
           story: page.story, curiosity: page.curiosity, knowledge: page.knowledge,
           visual: page.visual, extra: page.extra, noorComment: page.noorComment, mystery: page.mystery,
+          mode,
       };
 
       this.speedModifier = 0;
@@ -2026,22 +2075,23 @@ export class MainScene extends Phaser.Scene {
       if (this.physics.world.isPaused === false) this.physics.pause();
       this.tweens.pauseAll();
 
-      // Noor flags the curiosity moment (kept light — her per-page reflection shows inside the modal).
+      // Noor flags the moment (kept light — her per-page reflection shows inside the modal).
       const line = pickNoorLine('lost_book_page');
       if (line) this.showNoorMessage(line.text, false, line.tone);
 
       this.syncUI();
-      return true;
   }
 
   /**
-   * M4: called from GameUI when the player finishes a page ("أضف إلى الكتاب"). Restores the page,
-   * fires achievement + chapter-completion side effects, then resumes gameplay.
+   * M4: called from GameUI when the player finishes the KNOWLEDGE beat ("أضف إلى الكتاب"). Restores the
+   * page, fires achievement + chapter-completion side effects, then resumes gameplay. (The curiosity beat
+   * does NOT restore — see dismissLostBookPage.)
    */
   public completeLostBookPage() {
       const view = this.activeLostBookPage;
       if (!view) return;
       this.activeLostBookPage = null;
+      this.curiosityAskedThisRun.delete(view.id);
 
       const newlyRestored = restorePage(view.id);
       if (newlyRestored) {
@@ -2052,6 +2102,22 @@ export class MainScene extends Phaser.Scene {
           this.checkAchievements();
       }
       this.refreshM4Snapshot();
+
+      if (this.physics.world.isPaused) this.physics.resume();
+      this.player.anims.resume();
+      this.speedModifier = 1.0;
+      this.tweens.resumeAll();
+      this.syncUI();
+  }
+
+  /**
+   * M4-R1: called from GameUI when the player dismisses the CURIOSITY beat ("لنبحث عن الإجابة"). The
+   * question stays open (already markCuriosityAsked'd) so its answer can surface on a later pickup —
+   * this just closes the modal and resumes gameplay. No page is restored here.
+   */
+  public dismissLostBookPage() {
+      if (!this.activeLostBookPage) return;
+      this.activeLostBookPage = null;
 
       if (this.physics.world.isPaused) this.physics.resume();
       this.player.anims.resume();
