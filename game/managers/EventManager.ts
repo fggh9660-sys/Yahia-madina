@@ -1354,7 +1354,10 @@ export class EventManager {
       this.scene.setGameSpeed(1.0);
       if (this.scene.physics.world.isPaused) this.scene.physics.resume();
       this.scene.player.anims.resume();
-      this.scene.tweens.add({ targets: this.scene.player, x: getPlayerStartX(this.scene.scale.width), duration: 2000, ease: 'Power2.inOut' });
+      // No scripted x-tween here: a blocking tween kept Player.update's isTweening guard true and ate
+      // jump/move input for its whole duration after the storm (Yahia 2026-06-20). The grounded
+      // auto-runner snap in Player.update glides the player back to startX with input fully live —
+      // matching resumeRunInLibrary, which never had this problem.
       this.eventPhase = 'NONE';
       this.encounterType = 'NONE';
       this.isEncounterActive = false;

@@ -2027,14 +2027,27 @@ export class MainScene extends Phaser.Scene {
           return false;
       }
 
-      // (1) Prefer paying off a curiosity the player has already searched for → the KNOWLEDGE beat.
+      // (1) Pay off a curiosity the player asked EARLIER THIS RUN and has since searched far enough → KNOWLEDGE.
       const ripeId = this.pickRipePendingCuriosity();
       if (ripeId) {
           const ripePage = findPage(ripeId);
           if (ripePage) { this.openLostBookPage(ripePage, 'knowledge'); return true; }
       }
 
-      // (2) Otherwise plant a NEW curiosity question — its answer surfaces on a later pickup.
+      // (2) Re-ask a curiosity left open from a PRIOR session as a QUESTION. The answer must never appear
+      //     before the player has seen its question this run (Yahia 2026-06-20) — so a stale pending is
+      //     re-presented as a question here, then becomes answerable later this run via step (1).
+      const staleId = this.pickStalePendingCuriosity();
+      if (staleId) {
+          const stalePage = findPage(staleId);
+          if (stalePage) {
+              this.curiosityAskedThisRun.set(staleId, this.runDistance);
+              this.openLostBookPage(stalePage, 'curiosity');
+              return true;
+          }
+      }
+
+      // (3) Otherwise plant a NEW curiosity question — its answer surfaces on a later pickup.
       const page = pickNextPage(this.currentStage, isPageRestored, isCuriosityPending, this.pageOfferedThisRun);
       if (!page) return false; // nothing new to ask and nothing ripe to answer — caller falls back to lore
 
@@ -2046,17 +2059,29 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
-   * M4-R1: pick a pending curiosity whose answer is allowed to surface now. Ripe = either asked in a
-   * PRIOR run/session (not in curiosityAskedThisRun → the player has already "kept going"), or asked
-   * this run and the player has since run at least KNOWLEDGE_MIN_DISTANCE. Returns the oldest such id
+   * M4-R1: pick a pending curiosity whose answer is allowed to surface now. Ripe = asked EARLIER THIS RUN
+   * and the player has since run at least KNOWLEDGE_MIN_DISTANCE. A curiosity asked in a prior session is
+   * NOT ripe (it is re-asked as a question first — see pickStalePendingCuriosity) so the answer can never
+   * appear before the player has seen the question this run (Yahia 2026-06-20). Returns the oldest such id
    * (getPendingCuriosityIds preserves ask order) so questions are answered in the order they appeared.
    */
   private pickRipePendingCuriosity(): string | null {
       for (const id of getPendingCuriosityIds()) {
           if (!findPage(id)) continue; // content removed — skip
           const askedAt = this.curiosityAskedThisRun.get(id);
-          const ripe = askedAt === undefined || (this.runDistance - askedAt) >= MainScene.KNOWLEDGE_MIN_DISTANCE;
-          if (ripe) return id;
+          if (askedAt !== undefined && (this.runDistance - askedAt) >= MainScene.KNOWLEDGE_MIN_DISTANCE) return id;
+      }
+      return null;
+  }
+
+  /**
+   * M4-R1: pick a pending curiosity that was asked in a PRIOR session (not yet re-asked this run). These
+   * get re-presented as a QUESTION so the player always sees the question before the answer.
+   */
+  private pickStalePendingCuriosity(): string | null {
+      for (const id of getPendingCuriosityIds()) {
+          if (!findPage(id)) continue; // content removed — skip
+          if (!this.curiosityAskedThisRun.has(id)) return id;
       }
       return null;
   }
