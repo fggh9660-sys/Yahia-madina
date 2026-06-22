@@ -202,8 +202,6 @@ export const LOST_BOOK_PAGES: LostBookPage[] = [
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
-
 /** All chapters (incl. locked teasers). */
 export const getChapters = (): LostBookChapter[] => LOST_BOOK_CHAPTERS;
 
@@ -237,10 +235,11 @@ export const pickNextPage = (
     if (available.length === 0) return undefined;
     const stageMatches = stage ? available.filter(p => p.stage === stage) : [];
     const pool = stageMatches.length > 0 ? stageMatches : available;
-    // prefer lower chapter/page first so the story unfolds in order, with light shuffle inside a chapter
+    // Lowest chapter first, then lowest page within it, so questions surface in story order — never
+    // shuffled/random (Yahia 2026-06-22: the question order must be sequential, not random).
     const lowestChapter = Math.min(...pool.map(p => p.chapter));
     const sameChapter = pool.filter(p => p.chapter === lowestChapter);
-    return shuffle(sameChapter)[0];
+    return [...sameChapter].sort((a, b) => a.page - b.page)[0];
 };
 
 /** How many pages of a chapter are restored. */
