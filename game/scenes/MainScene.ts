@@ -123,9 +123,16 @@ export class MainScene extends Phaser.Scene {
   private pageOfferedThisRun: string[] = [];
   // M4-R1: curiosity questions ASKED this run → the runDistance (m) at which each was asked. Drives the
   // "answer appears later" gate: a curiosity is only answered once the player has run far enough since
-  // asking it. Pending curiosities NOT in this map were asked in a PRIOR run/session → already "waited",
-  // so they are ripe to answer immediately. Reset each run (in create()).
+  // asking it. Pending curiosities NOT in this map were asked in a PRIOR run/session → re-asked as a
+  // question first (never answered cold). Reset each run (in create()).
   private curiosityAskedThisRun: Map<string, number> = new Map();
+  // M4-R2 (Yahia 2026-06-22): stage-progress pacing for the Lost Book loop. Instead of firing a beat on
+  // every rare pickup, only a few Q→A beats fire per stage, spaced far apart, so the player carries a
+  // question across a long stretch before the answer. lostBookScheduleStage = the stage these counters
+  // are set for (0 = needs (re)init, also forces a reset at the start of each new run).
+  private lostBookScheduleStage: number = 0;
+  private lostBookBeatsThisStage: number = 0;
+  private lostBookNextBeatAt: number = 0;
   // M4: long-term progression snapshot pushed to the HUD + Library hub.
   private m4Snapshot: M4Snapshot = { pagesRestored: 0, totalPages: 0, chaptersComplete: 0, achievementsUnlocked: 0 };
   // M3A: active mini-challenge modal — replaces legacy activeQuestion popup flow.
@@ -273,7 +280,7 @@ export class MainScene extends Phaser.Scene {
         dbg.__krSpawnChest = (theme: string) => this.eventManager.debugSpawnThemedChest(theme as ChallengeEvent);
         // M4 (TEMPORARY review aids): open a Lost Book page on demand, and reset all M4 progress.
         // From the console: window.__krLostBookPage()  /  window.__krResetProgress().
-        dbg.__krLostBookPage = () => this.showLostBookPage();
+        dbg.__krLostBookPage = () => this.showLostBookPage(true); // force: bypass stage-pacing gate for testing
         dbg.__krResetProgress = () => { resetProgress(); this.refreshM4Snapshot(); this.syncUI(); return 'M4 progress reset'; };
     } catch { /* ignore */ }
 
@@ -545,6 +552,9 @@ export class MainScene extends Phaser.Scene {
     this.activeLostBookPage = null;
     this.pageOfferedThisRun = [];
     this.curiosityAskedThisRun.clear();
+    this.lostBookScheduleStage = 0; // M4-R2: force the stage-pacing schedule to re-init for the new run
+    this.lostBookBeatsThisStage = 0;
+    this.lostBookNextBeatAt = 0;
     this.refreshM4Snapshot();
 
     this.guideFlags = { welcome: false, firstJump: false, firstGate: false };
@@ -2016,6 +2026,18 @@ export class MainScene extends Phaser.Scene {
   private static readonly KNOWLEDGE_MIN_DISTANCE = 300;
 
   /**
+   * M4-R2 stage-progress pacing (Yahia 2026-06-22). The Lost Book Q/A loop is paced PER STAGE, not per
+   * pickup: the first beat lands a bit after the stage starts, then each following beat is at least
+   * BEAT_SPACING_M further on — so a question is carried across a long stretch before its answer. With
+   * spacing > KNOWLEDGE_MIN_DISTANCE the planted question is always ripe by the next beat, giving the
+   * Q → (run) → A → (run) → Q → (run) → A rhythm. MAX_BEATS_PER_STAGE caps it at ~2–3 chains/stage;
+   * rare pickups between beats fall back to world-lore.
+   */
+  private static readonly LOST_BOOK_FIRST_BEAT_OFFSET_M = 250;
+  private static readonly LOST_BOOK_BEAT_SPACING_M = 650;
+  private static readonly LOST_BOOK_MAX_BEATS_PER_STAGE = 6; // 6 beats = 3 Q→A chains
+
+  /**
    * M4: surface the Lost Book loop on a discovery pickup. The curiosity (question) and knowledge
    * (answer) are now TWO SEPARATE BEATS (Yahia 2026-06-19):
    *   1. If a previously-asked curiosity has aged enough → open its KNOWLEDGE answer (and it gets
@@ -2024,9 +2046,24 @@ export class MainScene extends Phaser.Scene {
    * Returns true if a modal was opened; false (nothing ripe + nothing new) lets the caller fall back
    * to the legacy lore card so rare pickups never feel empty. Freezes the world like showFragmentLore.
    */
-  public showLostBookPage(): boolean {
+  public showLostBookPage(force: boolean = false): boolean {
       if (this.activeLostBookPage || this.activeFragmentLore || this.activeQuestion || this.isPausedMenu || this.isGameOver) {
           return false;
+      }
+
+      // M4-R2 stage-progress pacing gate (Yahia 2026-06-22). Only a few Q→A beats per stage, spaced far
+      // apart; between them the rare pickup falls back to world-lore (caller handles the false return).
+      // `force` (dev shortcut) bypasses the gate. The schedule re-inits whenever the stage changes — and
+      // because a new run resets currentStage to 1 while lostBookScheduleStage starts at 0, it re-inits
+      // for each run too.
+      if (!force) {
+          if (this.currentStage !== this.lostBookScheduleStage) {
+              this.lostBookScheduleStage = this.currentStage;
+              this.lostBookBeatsThisStage = 0;
+              this.lostBookNextBeatAt = this.runDistance + MainScene.LOST_BOOK_FIRST_BEAT_OFFSET_M;
+          }
+          if (this.lostBookBeatsThisStage >= MainScene.LOST_BOOK_MAX_BEATS_PER_STAGE) return false;
+          if (this.runDistance < this.lostBookNextBeatAt) return false;
       }
 
       // (1) Pay off a curiosity the player asked EARLIER THIS RUN and has since searched far enough → KNOWLEDGE.
@@ -2090,6 +2127,11 @@ export class MainScene extends Phaser.Scene {
 
   /** M4-R1: build the modal view + freeze the world for either loop beat. */
   private openLostBookPage(page: LostBookPage, mode: 'curiosity' | 'knowledge') {
+      // M4-R2: a beat fired — advance the stage-pacing schedule so the next one is BEAT_SPACING_M further
+      // on (measured from here, so real spacing holds regardless of when the pickup actually landed).
+      this.lostBookBeatsThisStage++;
+      this.lostBookNextBeatAt = this.runDistance + MainScene.LOST_BOOK_BEAT_SPACING_M;
+
       this.activeLostBookPage = {
           id: page.id, chapter: page.chapter, page: page.page,
           story: page.story, curiosity: page.curiosity, knowledge: page.knowledge,
