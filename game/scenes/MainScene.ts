@@ -1928,6 +1928,7 @@ export class MainScene extends Phaser.Scene {
       if (this.isBookOfNoorOpen || this.isGameOver) return;
       this.isBookOfNoorOpen = true;
       this.speedModifier = 0;
+      this.player.clearGhosts(); // kill the jump trail before pauseAll freezes it (else ghosts stick — Yahia 2026-06-22)
       this.player.anims.pause();
       if (this.physics.world.isPaused === false) this.physics.pause();
       this.tweens.pauseAll();
@@ -1949,6 +1950,7 @@ export class MainScene extends Phaser.Scene {
       this.activeColorChoice = true;
       this.colorDiscoveryFired = true;
       this.speedModifier = 0;
+      this.player.clearGhosts(); // kill the jump trail before pauseAll freezes it (else ghosts stick — Yahia 2026-06-22)
       this.player.anims.pause();
       if (this.physics.world.isPaused === false) this.physics.pause();
       this.tweens.pauseAll();
@@ -2096,6 +2098,7 @@ export class MainScene extends Phaser.Scene {
       };
 
       this.speedModifier = 0;
+      this.player.clearGhosts(); // kill the jump trail before pauseAll freezes it (else ghosts stick — Yahia 2026-06-22)
       this.player.anims.pause();
       if (this.physics.world.isPaused === false) this.physics.pause();
       this.tweens.pauseAll();

@@ -86,6 +86,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Juice
   private dustEmitter!: Phaser.GameObjects.Particles.ParticleEmitter;
   private ghostTimer: number = 0;
+  private ghosts: Phaser.GameObjects.Sprite[] = [];
   private wasJumpingLastFrame: boolean = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -733,10 +734,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
                  if (this.anims.currentAnim?.key !== 'jump' && this.scene.anims.exists('jump')) this.play('jump', true);
              }
         }
-        this.ghostTimer += delta;
-        if (this.ghostTimer > 80) { 
-            this.createGhost();
-            this.ghostTimer = 0;
+        // Don't spawn motion ghosts while the world is frozen (Lost Book modal / event freeze): physics
+        // is paused but update() still runs, so otherwise ghosts pile up at the frozen jump position and
+        // their paused fade-out tweens leave them stuck in the background (Yahia 2026-06-22).
+        if (!this.scene.physics.world.isPaused) {
+            this.ghostTimer += delta;
+            if (this.ghostTimer > 80) {
+                this.createGhost();
+                this.ghostTimer = 0;
+            }
         }
     } else {
         if (this.isStruggling) {
@@ -786,7 +792,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       ghost.setDepth(18);
       ghost.setRotation(this.rotation);
       ghost.setScale(this.scaleX, this.scaleY);
-      this.scene.tweens.add({ targets: ghost, alpha: 0, x: this.x - 30, duration: 300, onComplete: () => ghost.destroy() });
+      this.ghosts.push(ghost);
+      this.scene.tweens.add({
+          targets: ghost, alpha: 0, x: this.x - 30, duration: 300,
+          onComplete: () => {
+              const i = this.ghosts.indexOf(ghost);
+              if (i !== -1) this.ghosts.splice(i, 1);
+              ghost.destroy();
+          },
+      });
+  }
+
+  /** Destroy any lingering motion-trail ghosts and kill their fade tweens. A tweens.pauseAll() during a
+   *  jump (Lost Book modal / event freeze) would otherwise orphan a ghost's fade-out, leaving the copy
+   *  stuck in the background (Yahia 2026-06-22). Call this right before freezing the world. */
+  public clearGhosts() {
+      for (const g of this.ghosts) {
+          this.scene.tweens.killTweensOf(g);
+          g.destroy();
+      }
+      this.ghosts.length = 0;
+      this.ghostTimer = 0;
   }
 
   destroy(fromScene?: boolean): void {
