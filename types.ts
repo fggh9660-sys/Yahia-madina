@@ -27,6 +27,8 @@ export interface StageResultsData {
   correctAnswers: number;
   wrongAnswers: number;
   timeSeconds: number;
+  /** M4 (system 9): forward-hook teaser shown at stage end, hinting the next destination/mystery. */
+  cliffhanger?: string;
 }
 
 export interface GameState {

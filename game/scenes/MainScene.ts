@@ -19,6 +19,7 @@ import {
     unlockAchievement, getUnlockedAchievementIds, resetProgress,
 } from '../../data/progress';
 import { evaluateAchievements, findAchievement, getTotalAchievements } from '../../data/achievements';
+import { getStageCliffhanger } from '../../data/stageCliffhangers';
 
 // Objects for Texture Generation
 import { Star } from '../objects/Star';
@@ -442,7 +443,8 @@ export class MainScene extends Phaser.Scene {
       stars: this.collectedStarsCount,
       correctAnswers: this.correctAnswersCount,
       wrongAnswers: this.wrongAnswersCount,
-      timeSeconds: (this.time.now - this.stageStartTime) / 1000
+      timeSeconds: (this.time.now - this.stageStartTime) / 1000,
+      cliffhanger: getStageCliffhanger('DESERT_END'),
     };
     this.showNoorMessage('رائع! لقد أنهيت هذه المرحلة بنجاح.', false, 'success');
     this.pendingTransition = 'DESERT_END';
@@ -459,7 +461,8 @@ export class MainScene extends Phaser.Scene {
       stars: this.collectedStarsCount,
       correctAnswers: this.correctAnswersCount,
       wrongAnswers: this.wrongAnswersCount,
-      timeSeconds: (this.time.now - this.cityStageStartTime) / 1000
+      timeSeconds: (this.time.now - this.cityStageStartTime) / 1000,
+      cliffhanger: getStageCliffhanger('LIBRARY_END'),
     };
     this.showNoorMessage('كل خطوة تقرّبك من نورٍ جديد.', false, 'success');
     this.pendingTransition = 'LIBRARY_END';
@@ -476,7 +479,8 @@ export class MainScene extends Phaser.Scene {
       stars: this.collectedStarsCount,
       correctAnswers: this.correctAnswersCount,
       wrongAnswers: this.wrongAnswersCount,
-      timeSeconds: (this.time.now - this.stageStartTime) / 1000
+      timeSeconds: (this.time.now - this.stageStartTime) / 1000,
+      cliffhanger: getStageCliffhanger('OBSERVATORY_END'),
     };
     this.showNoorMessage('لقد بلغنا النجوم… ورحلة العلم لا تنتهي أبداً.', false, 'success');
     this.pendingTransition = 'OBSERVATORY_END';

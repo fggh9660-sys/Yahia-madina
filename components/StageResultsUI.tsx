@@ -64,7 +64,21 @@ export const StageResultsUI: React.FC<StageResultsUIProps> = ({ data, onContinue
             </div>
           </div>
 
-          <div className="px-4 md:px-6 pb-4 md:pb-6">
+          {/* M4 (system 9): forward-hook cliffhanger — teases the next destination / deepens the mystery. */}
+          {data.cliffhanger ? (
+            <div className="px-4 md:px-6 pb-1">
+              <div className="bg-[#ffd700]/[0.06] border border-[#ffd700]/25 rounded-xl p-3 md:p-4">
+                <p className="text-[#ffd66b] text-[10px] md:text-xs font-bold tracking-wider mb-1.5 text-center">
+                  ✨ ماذا ينتظرك؟
+                </p>
+                <p className="text-white/85 text-sm md:text-base leading-relaxed text-center italic">
+                  {data.cliffhanger}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="px-4 md:px-6 pb-4 md:pb-6 pt-3">
             <button
               type="button"
               onClick={onContinue}
