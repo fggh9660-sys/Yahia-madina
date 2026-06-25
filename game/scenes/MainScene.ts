@@ -127,13 +127,16 @@ export class MainScene extends Phaser.Scene {
   // asking it. Pending curiosities NOT in this map were asked in a PRIOR run/session → re-asked as a
   // question first (never answered cold). Reset each run (in create()).
   private curiosityAskedThisRun: Map<string, number> = new Map();
-  // M4-R2 (Yahia 2026-06-22): stage-progress pacing for the Lost Book loop. Instead of firing a beat on
-  // every rare pickup, only a few Q→A beats fire per stage, spaced far apart, so the player carries a
-  // question across a long stretch before the answer. lostBookScheduleStage = the stage these counters
-  // are set for (0 = needs (re)init, also forces a reset at the start of each new run).
+  // M4-R2 (Yahia 2026-06-22, retuned 2026-06-25): stage-progress pacing for the Lost Book loop. Beats are
+  // spaced PROPORTIONALLY to the actual stage length (stages are short: 450m / 600m / 5000m) so questions
+  // reliably appear AND spread as far as the stage allows — a fixed 650m gap produced ZERO questions in the
+  // 450m desert. lostBookScheduleStage = stage these counters are set for (0 = needs (re)init, also forces
+  // a reset each new run). beatSpacing/maxBeats are recomputed per stage from its length.
   private lostBookScheduleStage: number = 0;
   private lostBookBeatsThisStage: number = 0;
   private lostBookNextBeatAt: number = 0;
+  private lostBookBeatSpacing: number = 200;
+  private lostBookMaxBeats: number = 6;
   // M4: long-term progression snapshot pushed to the HUD + Library hub.
   private m4Snapshot: M4Snapshot = { pagesRestored: 0, totalPages: 0, chaptersComplete: 0, achievementsUnlocked: 0 };
   // M3A: active mini-challenge modal — replaces legacy activeQuestion popup flow.
@@ -2022,24 +2025,26 @@ export class MainScene extends Phaser.Scene {
   // ── M4: Lost Book page discovery ───────────────────────────────────────────
 
   /**
-   * M4-R1: minimum run-distance (metres) the player must cover AFTER finding a Curiosity Fragment
-   * before its Knowledge answer is allowed to surface. This is what turns the loop into
-   * "question → keep running → discover the answer later" instead of question→immediate-answer
-   * (Yahia 2026-06-19). Pickups spawn ~every 200m, so this lands the answer ~1–2 pickups later.
+   * M4-R2 stage-progress pacing (Yahia 2026-06-22, retuned 2026-06-25). The Lost Book Q/A loop is paced PER
+   * STAGE. Beat spacing is PROPORTIONAL to the stage length — stages are short (450m desert / 600m city /
+   * 5000m observatory), so a fixed gap either misses the stage entirely (the 650m gap gave 0 questions in
+   * the 450m desert) or bunches up. spacing = clamp(stageLength/6, MIN, MAX); the first beat lands ~OFFSET
+   * in (early enough to catch the first rare pickup); maxBeats fits the stage and caps at ~3 chains. The
+   * answer is ripe at the NEXT beat (asked-earlier-this-run), so the gap = whatever the stage affords.
+   * NOTE: a 450m stage with ~200m rare-pickup cadence can only host ~1 chain — true 2–3 separated chains
+   * per stage need longer stages (a Yahia design call; see the message to Nanda).
    */
-  private static readonly KNOWLEDGE_MIN_DISTANCE = 300;
+  private static readonly LOST_BOOK_MIN_SPACING_M = 150;
+  private static readonly LOST_BOOK_MAX_SPACING_M = 700;
+  private static readonly LOST_BOOK_FIRST_OFFSET_M = 100; // catches the first rare pickup (~120m)
+  private static readonly LOST_BOOK_MAX_BEATS_PER_STAGE = 6; // hard cap (~3 Q→A chains)
 
-  /**
-   * M4-R2 stage-progress pacing (Yahia 2026-06-22). The Lost Book Q/A loop is paced PER STAGE, not per
-   * pickup: the first beat lands a bit after the stage starts, then each following beat is at least
-   * BEAT_SPACING_M further on — so a question is carried across a long stretch before its answer. With
-   * spacing > KNOWLEDGE_MIN_DISTANCE the planted question is always ripe by the next beat, giving the
-   * Q → (run) → A → (run) → Q → (run) → A rhythm. MAX_BEATS_PER_STAGE caps it at ~2–3 chains/stage;
-   * rare pickups between beats fall back to world-lore.
-   */
-  private static readonly LOST_BOOK_FIRST_BEAT_OFFSET_M = 250;
-  private static readonly LOST_BOOK_BEAT_SPACING_M = 650;
-  private static readonly LOST_BOOK_MAX_BEATS_PER_STAGE = 6; // 6 beats = 3 Q→A chains
+  /** Authored length (m) of a stage, used to pace the Lost Book beats proportionally. */
+  private lostBookStageLength(stage: number): number {
+      if (stage >= 3) return PROGRESS.STAGE_3_LENGTH_M;
+      if (stage === 2) return PROGRESS.STAGE_2_LENGTH_M;
+      return PROGRESS.STAGE_1_LENGTH_M;
+  }
 
   /**
    * M4: surface the Lost Book loop on a discovery pickup. The curiosity (question) and knowledge
@@ -2062,11 +2067,19 @@ export class MainScene extends Phaser.Scene {
       // for each run too.
       if (!force) {
           if (this.currentStage !== this.lostBookScheduleStage) {
+              // New stage → recompute the schedule from THIS stage's length so beats fit & spread.
               this.lostBookScheduleStage = this.currentStage;
               this.lostBookBeatsThisStage = 0;
-              this.lostBookNextBeatAt = this.runDistance + MainScene.LOST_BOOK_FIRST_BEAT_OFFSET_M;
+              const stageLen = this.lostBookStageLength(this.currentStage);
+              this.lostBookBeatSpacing = Phaser.Math.Clamp(
+                  Math.round(stageLen / 6), MainScene.LOST_BOOK_MIN_SPACING_M, MainScene.LOST_BOOK_MAX_SPACING_M,
+              );
+              this.lostBookMaxBeats = Phaser.Math.Clamp(
+                  Math.floor(stageLen / this.lostBookBeatSpacing) + 1, 2, MainScene.LOST_BOOK_MAX_BEATS_PER_STAGE,
+              );
+              this.lostBookNextBeatAt = this.runDistance + MainScene.LOST_BOOK_FIRST_OFFSET_M;
           }
-          if (this.lostBookBeatsThisStage >= MainScene.LOST_BOOK_MAX_BEATS_PER_STAGE) return false;
+          if (this.lostBookBeatsThisStage >= this.lostBookMaxBeats) return false;
           if (this.runDistance < this.lostBookNextBeatAt) return false;
       }
 
@@ -2102,17 +2115,18 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
-   * M4-R1: pick a pending curiosity whose answer is allowed to surface now. Ripe = asked EARLIER THIS RUN
-   * and the player has since run at least KNOWLEDGE_MIN_DISTANCE. A curiosity asked in a prior session is
-   * NOT ripe (it is re-asked as a question first — see pickStalePendingCuriosity) so the answer can never
-   * appear before the player has seen the question this run (Yahia 2026-06-20). Returns the oldest such id
-   * (getPendingCuriosityIds preserves ask order) so questions are answered in the order they appeared.
+   * M4-R1: pick a pending curiosity whose answer is allowed to surface now. Ripe = asked at an EARLIER BEAT
+   * this run (askedAt strictly before the current distance). The stage-pacing schedule already spaces beats,
+   * so "next beat" is the carry distance — no separate absolute gate. A curiosity asked in a prior session
+   * is NOT ripe (re-asked as a question first — see pickStalePendingCuriosity) so the answer never appears
+   * before the player has seen the question this run (Yahia 2026-06-20). Oldest-first (getPendingCuriosityIds
+   * preserves ask order) so questions are answered in the order they appeared.
    */
   private pickRipePendingCuriosity(): string | null {
       for (const id of getPendingCuriosityIds()) {
           if (!findPage(id)) continue; // content removed — skip
           const askedAt = this.curiosityAskedThisRun.get(id);
-          if (askedAt !== undefined && (this.runDistance - askedAt) >= MainScene.KNOWLEDGE_MIN_DISTANCE) return id;
+          if (askedAt !== undefined && this.runDistance > askedAt) return id;
       }
       return null;
   }
@@ -2131,10 +2145,10 @@ export class MainScene extends Phaser.Scene {
 
   /** M4-R1: build the modal view + freeze the world for either loop beat. */
   private openLostBookPage(page: LostBookPage, mode: 'curiosity' | 'knowledge') {
-      // M4-R2: a beat fired — advance the stage-pacing schedule so the next one is BEAT_SPACING_M further
-      // on (measured from here, so real spacing holds regardless of when the pickup actually landed).
+      // M4-R2: a beat fired — advance the stage-pacing schedule by THIS stage's spacing (measured from
+      // here, so real spacing holds regardless of when the pickup actually landed).
       this.lostBookBeatsThisStage++;
-      this.lostBookNextBeatAt = this.runDistance + MainScene.LOST_BOOK_BEAT_SPACING_M;
+      this.lostBookNextBeatAt = this.runDistance + this.lostBookBeatSpacing;
 
       this.activeLostBookPage = {
           id: page.id, chapter: page.chapter, page: page.page,
