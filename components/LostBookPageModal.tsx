@@ -31,6 +31,7 @@ const MYSTERY_BADGE: Record<LostBookPageView['mystery'], { label: string; color:
 export const LostBookPageModal: React.FC<Props> = ({ page, onComplete, onContinue }) => {
     const badge = MYSTERY_BADGE[page.mystery];
     const isCuriosity = page.mode === 'curiosity';
+    const isClue = page.mode === 'clue';
 
     return (
         <div
@@ -52,7 +53,7 @@ export const LostBookPageModal: React.FC<Props> = ({ page, onComplete, onContinu
                     </span>
                 </div>
 
-                <div className="text-3xl mb-3">{isCuriosity ? '❔' : '📖'}</div>
+                <div className="text-3xl mb-3">{isCuriosity ? '❔' : isClue ? '🔍' : '📖'}</div>
 
                 {isCuriosity ? (
                     <>
@@ -70,6 +71,24 @@ export const LostBookPageModal: React.FC<Props> = ({ page, onComplete, onContinu
                             className="px-7 py-2.5 rounded-full bg-[#ffd700] hover:bg-[#ffe34d] text-slate-900 font-black text-sm shadow-lg shadow-amber-500/30 transition transform hover:-translate-y-0.5 cursor-pointer touch-manipulation"
                         >
                             لنبحث عن الإجابة ✨
+                        </button>
+                    </>
+                ) : isClue ? (
+                    <>
+                        {/* CLUE — Noor's hint between the question and the answer; keep playing. */}
+                        <div className="text-[#9be7ff] text-sm font-bold mb-2 tracking-wide">همسة من نور 🔎</div>
+                        <h3 className="text-white text-lg md:text-xl font-black mb-5 leading-snug">
+                            {page.clue}
+                        </h3>
+                        <p className="text-white/70 text-sm leading-relaxed mb-6">
+                            نقترب من الإجابة… لنواصل الركض ونبحث!
+                        </p>
+                        <button
+                            type="button"
+                            onClick={onContinue}
+                            className="px-7 py-2.5 rounded-full bg-[#9be7ff] hover:bg-[#baf0ff] text-slate-900 font-black text-sm shadow-lg shadow-sky-400/30 transition transform hover:-translate-y-0.5 cursor-pointer touch-manipulation"
+                        >
+                            لنواصل البحث 🔎
                         </button>
                     </>
                 ) : (

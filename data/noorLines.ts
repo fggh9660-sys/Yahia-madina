@@ -26,6 +26,8 @@ export type NoorCue =
     | 'lost_book_intro'
     | 'color_discovery'
     | 'color_chosen'
+    | 'lost_book_question'
+    | 'lost_book_clue'
     | 'lost_book_page'
     | 'lost_book_chapter_complete';
 
@@ -67,6 +69,16 @@ const LINES: Record<NoorCue, NoorLine[]> = {
         { text: 'اختيار جميل! ليكن هذا اللون رفيقك على الطريق. هيا نواصل رحلتنا.', tone: 'success' },
         { text: 'رائع… أرى أن قلبك قد اختار. سيرافقك هذا النور أينما ذهبت.', tone: 'success' },
         { text: 'الآن أصبحت رحلتك تحمل لونك الخاص. لنُكمل إلى الأمام!', tone: 'success' },
+    ],
+    lost_book_question: [
+        { text: 'سؤالٌ جميل… لنبحث عن إجابته معاً ونحن نركض.', tone: 'greet' },
+        { text: 'همم، هذا يثير فضولي أنا أيضاً. واصل، فالجواب في مكانٍ ما على الطريق.', tone: 'greet' },
+        { text: 'سؤالٌ يستحقّ التفكير. لنواصل ونكتشف سرّه.', tone: 'encourage' },
+    ],
+    lost_book_clue: [
+        { text: 'خذ هذا التلميح منّي… فأنا أرافقك في كل خطوة من البحث.', tone: 'encourage' },
+        { text: 'أشعر أننا نقترب. دعني أهمس لك بدليلٍ صغير.', tone: 'greet' },
+        { text: 'تلميحٌ يقودك نحو الجواب… ثقتي بك كبيرة.', tone: 'encourage' },
     ],
     lost_book_page: [
         { text: 'انظر! صفحة من الكتاب المفقود… لنكتشف سرّها معاً.', tone: 'greet' },

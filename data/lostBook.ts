@@ -200,6 +200,29 @@ export const LOST_BOOK_PAGES: LostBookPage[] = [
     },
 ];
 
+/**
+ * M4 (Yahia 2026-06-25): the CLUE for each page — an intermediate hint shown BETWEEN the question and the
+ * answer, so the Curiosity Journey is: Question → (run) → Clue → (run) → Answer. The clue is delivered as
+ * Noor's hint (she accompanies the discovery). Yahia-editable; keyed by page id. Missing → no clue beat.
+ */
+export const PAGE_CLUES: Record<string, string> = {
+    'ch1-p1':  'ارفع بصرك ليلاً… ثمّة ما لا يتحرّك أبداً في السماء.',
+    'ch1-p2':  'السرّ في ظهره… تلك الحدبة تحمل أكثر ممّا تظنّ.',
+    'ch1-p3':  'الخضرة لا تولد من الرمل… بل ممّا يختبئ تحته.',
+    'ch1-p4':  'القمر يتنقّل بين منازل… ولكلّ منزلةٍ وقتها.',
+    'ch1-p5':  'انظر إليها كاملةً: ثمرها وظلّها وليفها وجذعها.',
+    'ch1-p6':  'قبل الورق، كانت الكلمة تُحفر وتُرسم على ما تيسّر من جلدٍ وطين.',
+    'ch1-p7':  'عُدّ الحروف… ولاحظ كيف يتبدّل شكلها بحسب موضعها.',
+    'ch1-p8':  'تتبّع خطّ الجمال في الأفق… إنّه طريقٌ قديم يربط المدن.',
+    'ch1-p9':  'أصغِ إلى الريح… هي التي تعيد رسم الكثبان كلّ يوم.',
+    'ch1-p10': 'تحت الأرض حلّ القدماء مشكلة العطش… بما حفروه وخزّنوه.',
+    'ch1-p11': 'النجوم نفسها دلّت البحّارة… بمعونة أداةٍ نحاسيّة قديمة.',
+    'ch1-p12': 'القباب المتلألئة في الرسم تشير جميعها إلى وجهةٍ واحدة.',
+};
+
+/** Clue text for a page, or '' if none authored (then the chain skips the clue beat). */
+export const getPageClue = (id: string): string => PAGE_CLUES[id] ?? '';
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 /** All chapters (incl. locked teasers). */

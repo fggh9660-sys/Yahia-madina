@@ -12,7 +12,7 @@ import { pickMiniChallenge, findMiniChallenge, pickMiniChallengeByEvent, type Ch
 import { getCollectedCount, getTotalPossible, getCompletionPercent } from '../../data/collectionState';
 import { hasSeenColorDiscovery, markColorDiscoverySeen } from '../../data/playerColor';
 import { LostBookPageView, M4Snapshot } from '../../types';
-import { pickNextPage, findPage, getTotalPages, isChapterComplete, getChapters, LostBookPage } from '../../data/lostBook';
+import { pickNextPage, findPage, getTotalPages, isChapterComplete, getChapters, getPageClue, LostBookPage } from '../../data/lostBook';
 import {
     restorePage, markCuriosityAsked, isPageRestored, isCuriosityPending, getPendingCuriosityIds,
     getRestoredPageCount, getRestoredPageIds, setNoorBeatSeen,
@@ -123,11 +123,11 @@ export class MainScene extends Phaser.Scene {
   private activeLostBookPage: LostBookPageView | null = null;
   // M4: page ids already offered this run, so a single run won't re-surface the same page mid-session.
   private pageOfferedThisRun: string[] = [];
-  // M4-R1: curiosity questions ASKED this run → the runDistance (m) at which each was asked. Drives the
-  // "answer appears later" gate: a curiosity is only answered once the player has run far enough since
-  // asking it. Pending curiosities NOT in this map were asked in a PRIOR run/session → re-asked as a
-  // question first (never answered cold). Reset each run (in create()).
-  private curiosityAskedThisRun: Map<string, number> = new Map();
+  // M4 (Yahia 2026-06-25): the Curiosity JOURNEY is a 3-beat chain — Question → Clue → Answer. These track
+  // the chain currently in progress: the page id and which beat comes next. Null id = no chain open, so the
+  // next scheduled beat plants a fresh Question. Reset each run.
+  private lostBookActivePageId: string | null = null;
+  private lostBookNextBeat: 'clue' | 'answer' = 'clue';
   // M4-R2 (Yahia 2026-06-22, retuned 2026-06-25): stage-progress pacing for the Lost Book loop. Beats are
   // spaced PROPORTIONALLY to the actual stage length (stages are short: 450m / 600m / 5000m) so questions
   // reliably appear AND spread as far as the stage allows — a fixed 650m gap produced ZERO questions in the
@@ -559,7 +559,8 @@ export class MainScene extends Phaser.Scene {
     // M4: reset per-run page offers + refresh the persistent progression snapshot.
     this.activeLostBookPage = null;
     this.pageOfferedThisRun = [];
-    this.curiosityAskedThisRun.clear();
+    this.lostBookActivePageId = null; // M4: no Curiosity Journey chain open at run start
+    this.lostBookNextBeat = 'clue';
     this.lostBookScheduleStage = 0; // M4-R2: force the stage-pacing schedule to re-init for the new run
     this.lostBookBeatsThisStage = 0;
     this.lostBookNextBeatAt = 0;
@@ -2062,7 +2063,7 @@ export class MainScene extends Phaser.Scene {
           this.lostBookScheduleStage = this.currentStage;
           this.lostBookBeatsThisStage = 0;
           const chains = MainScene.LOST_BOOK_CHAINS_PER_STAGE[this.currentStage] ?? 2;
-          this.lostBookMaxBeats = chains * 2;
+          this.lostBookMaxBeats = chains * 3; // M4: each chain is now 3 beats — Question → Clue → Answer
           this.lostBookBeatSpacing = this.lostBookStageLength(this.currentStage) / (this.lostBookMaxBeats + 1);
           this.lostBookNextBeatAt = this.runDistance + this.lostBookBeatSpacing;
       }
@@ -2083,87 +2084,53 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
-   * M4: surface the Lost Book loop on a discovery pickup. The curiosity (question) and knowledge
-   * (answer) are now TWO SEPARATE BEATS (Yahia 2026-06-19):
-   *   1. If a previously-asked curiosity has aged enough → open its KNOWLEDGE answer (and it gets
-   *      restored on completeLostBookPage()).
-   *   2. Otherwise open a NEW CURIOSITY question only — the answer is found on a later pickup.
-   * Returns true if a modal was opened; false (nothing ripe + nothing new) lets the caller fall back
-   * to the legacy lore card so rare pickups never feel empty. Freezes the world like showFragmentLore.
+   * M4 (Yahia 2026-06-25): advance the 3-beat Curiosity JOURNEY — Question → Clue → Answer. Timing is driven
+   * by updateLostBookSchedule() (distance-based, per stage); this just shows the NEXT beat of the chain:
+   *   - no chain open → resume a question left unfinished from a prior run, else plant a fresh QUESTION;
+   *   - chain open, next = clue   → show Noor's CLUE (skipped to the answer if the page has no clue authored);
+   *   - chain open, next = answer → show the ANSWER (Noor connects everything; page restored on complete).
+   * Returns true if a modal opened; false lets the caller fall back to a world-lore card.
    */
   public showLostBookPage(): boolean {
       if (this.activeLostBookPage || this.activeFragmentLore || this.activeQuestion || this.isPausedMenu || this.isGameOver) {
           return false;
       }
 
-      // Timing is driven by updateLostBookSchedule() (distance-based, per stage). This just decides which
-      // beat to show right now: pay off a ripe question → KNOWLEDGE, else plant/re-ask a CURIOSITY.
-
-      // (1) Pay off a curiosity the player asked EARLIER THIS RUN and has since searched far enough → KNOWLEDGE.
-      const ripeId = this.pickRipePendingCuriosity();
-      if (ripeId) {
-          const ripePage = findPage(ripeId);
-          if (ripePage) { this.openLostBookPage(ripePage, 'knowledge'); return true; }
-      }
-
-      // (2) Re-ask a curiosity left open from a PRIOR session as a QUESTION. The answer must never appear
-      //     before the player has seen its question this run (Yahia 2026-06-20) — so a stale pending is
-      //     re-presented as a question here, then becomes answerable later this run via step (1).
-      const staleId = this.pickStalePendingCuriosity();
-      if (staleId) {
-          const stalePage = findPage(staleId);
-          if (stalePage) {
-              this.curiosityAskedThisRun.set(staleId, this.runDistance);
-              this.openLostBookPage(stalePage, 'curiosity');
+      // A chain is already in progress → show its next beat.
+      if (this.lostBookActivePageId) {
+          const page = findPage(this.lostBookActivePageId);
+          if (!page) {
+              this.lostBookActivePageId = null; // content removed — fall through to start a new chain
+          } else if (this.lostBookNextBeat === 'clue') {
+              this.lostBookNextBeat = 'answer';
+              this.openLostBookPage(page, getPageClue(page.id) ? 'clue' : 'knowledge');
+              return true;
+          } else {
+              this.openLostBookPage(page, 'knowledge'); // restored + chain cleared in completeLostBookPage
               return true;
           }
       }
 
-      // (3) Otherwise plant a NEW curiosity question — its answer surfaces on a later pickup.
-      const page = pickNextPage(this.currentStage, isPageRestored, isCuriosityPending, this.pageOfferedThisRun);
-      if (!page) return false; // nothing new to ask and nothing ripe to answer — caller falls back to lore
+      // No chain open → resume an unfinished question from a prior run (still pending, not restored), else
+      // plant a NEW one. pickNextPage already excludes restored/pending pages.
+      const staleId = getPendingCuriosityIds().find(id => findPage(id) && !this.pageOfferedThisRun.includes(id));
+      const page = staleId ? findPage(staleId)! : pickNextPage(this.currentStage, isPageRestored, isCuriosityPending, this.pageOfferedThisRun);
+      if (!page) return false; // nothing left to ask — caller falls back to lore
 
       this.pageOfferedThisRun.push(page.id);
       markCuriosityAsked(page.id);
-      this.curiosityAskedThisRun.set(page.id, this.runDistance);
+      this.lostBookActivePageId = page.id;
+      this.lostBookNextBeat = 'clue';
       this.openLostBookPage(page, 'curiosity');
       return true;
   }
 
-  /**
-   * M4-R1: pick a pending curiosity whose answer is allowed to surface now. Ripe = asked at an EARLIER BEAT
-   * this run (askedAt strictly before the current distance). The stage-pacing schedule already spaces beats,
-   * so "next beat" is the carry distance — no separate absolute gate. A curiosity asked in a prior session
-   * is NOT ripe (re-asked as a question first — see pickStalePendingCuriosity) so the answer never appears
-   * before the player has seen the question this run (Yahia 2026-06-20). Oldest-first (getPendingCuriosityIds
-   * preserves ask order) so questions are answered in the order they appeared.
-   */
-  private pickRipePendingCuriosity(): string | null {
-      for (const id of getPendingCuriosityIds()) {
-          if (!findPage(id)) continue; // content removed — skip
-          const askedAt = this.curiosityAskedThisRun.get(id);
-          if (askedAt !== undefined && this.runDistance > askedAt) return id;
-      }
-      return null;
-  }
-
-  /**
-   * M4-R1: pick a pending curiosity that was asked in a PRIOR session (not yet re-asked this run). These
-   * get re-presented as a QUESTION so the player always sees the question before the answer.
-   */
-  private pickStalePendingCuriosity(): string | null {
-      for (const id of getPendingCuriosityIds()) {
-          if (!findPage(id)) continue; // content removed — skip
-          if (!this.curiosityAskedThisRun.has(id)) return id;
-      }
-      return null;
-  }
-
-  /** M4-R1: build the modal view + freeze the world for either loop beat. */
-  private openLostBookPage(page: LostBookPage, mode: 'curiosity' | 'knowledge') {
+  /** M4: build the modal view + freeze the world for a journey beat (curiosity / clue / knowledge). */
+  private openLostBookPage(page: LostBookPage, mode: 'curiosity' | 'clue' | 'knowledge') {
       this.activeLostBookPage = {
           id: page.id, chapter: page.chapter, page: page.page,
           story: page.story, curiosity: page.curiosity, knowledge: page.knowledge,
+          clue: getPageClue(page.id),
           visual: page.visual, extra: page.extra, noorComment: page.noorComment, mystery: page.mystery,
           mode,
       };
@@ -2174,8 +2141,10 @@ export class MainScene extends Phaser.Scene {
       if (this.physics.world.isPaused === false) this.physics.pause();
       this.tweens.pauseAll();
 
-      // Noor flags the moment (kept light — her per-page reflection shows inside the modal).
-      const line = pickNoorLine('lost_book_page');
+      // Noor accompanies EVERY beat (Yahia 2026-06-25): reacts to the question, gives the clue/hint, and
+      // connects everything at the answer.
+      const cue = mode === 'curiosity' ? 'lost_book_question' : mode === 'clue' ? 'lost_book_clue' : 'lost_book_page';
+      const line = pickNoorLine(cue);
       if (line) this.showNoorMessage(line.text, false, line.tone);
 
       this.syncUI();
@@ -2190,7 +2159,8 @@ export class MainScene extends Phaser.Scene {
       const view = this.activeLostBookPage;
       if (!view) return;
       this.activeLostBookPage = null;
-      this.curiosityAskedThisRun.delete(view.id);
+      this.lostBookActivePageId = null; // M4: the answer beat closes the Curiosity Journey chain
+      this.lostBookNextBeat = 'clue';
 
       const newlyRestored = restorePage(view.id);
       if (newlyRestored) {

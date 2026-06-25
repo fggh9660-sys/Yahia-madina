@@ -86,16 +86,19 @@ export interface LostBookPageView {
   story: string;
   curiosity: string;
   knowledge: string;
+  /** M4 (Yahia 2026-06-25): intermediate hint shown between question and answer (Noor's clue). */
+  clue: string;
   visual: string;
   extra?: string;
   noorComment: string;
   mystery: 'small' | 'medium' | 'major';
   /**
-   * M4-R1: which beat of the curiosity→knowledge loop this modal is showing.
+   * M4: which beat of the Curiosity Journey this modal is showing (Question → Clue → Answer).
    *  - 'curiosity' = the question only (answer not yet found — keep playing).
-   *  - 'knowledge' = the answer + visual, surfaced on a LATER pickup once the curiosity has aged.
+   *  - 'clue'      = an intermediate hint from Noor (still keep playing).
+   *  - 'knowledge' = the answer + visual, where Noor connects everything and the page is restored.
    */
-  mode: 'curiosity' | 'knowledge';
+  mode: 'curiosity' | 'clue' | 'knowledge';
 }
 
 /** M4: progression numbers surfaced to the UI. */
