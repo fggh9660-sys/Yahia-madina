@@ -60,6 +60,11 @@ export const HomeUI: React.FC<HomeUIProps> = ({ onStart }) => {
                     </button>
                 </div>
             </div>
+
+            {/* Build marker — lets us + the client confirm exactly which deploy is live (cache/version checks). */}
+            <span className="fixed bottom-1 left-2 z-30 text-[9px] leading-none text-white/30 font-mono pointer-events-none select-none">
+                build {__BUILD_ID__}
+            </span>
         </div>
     );
 };

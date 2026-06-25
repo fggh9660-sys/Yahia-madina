@@ -250,6 +250,41 @@ function App() {
     };
   }, []);
 
+  // Robust audio unlock: browsers (and a dev HMR remount) leave the WebAudio context suspended and block
+  // HTMLAudio.play() until a user gesture. The intro-gate tap handles the normal flow, but if the first
+  // interaction happens elsewhere (or after a hot-reload) audio stays silent. This one-shot listener on the
+  // FIRST interaction anywhere resumes Phaser's context and "primes" the BGM elements so later play() works.
+  useEffect(() => {
+    let done = false;
+    const unlock = () => {
+      if (done) return;
+      done = true;
+      try {
+        const ctx = (gameRef.current as any)?.sound?.context as AudioContext | undefined;
+        if (ctx && ctx.state === 'suspended') void ctx.resume();
+      } catch (_) { /* ignore */ }
+      [bgmAudioRef, stage2BgmAudioRef, menuBgmAudioRef].forEach((ref) => {
+        const a = ref.current;
+        if (!a) return;
+        const wasMuted = a.muted;
+        a.muted = true;
+        a.play().then(() => { a.pause(); try { a.currentTime = 0; } catch (_) { /* ignore */ } a.muted = wasMuted; })
+          .catch(() => { a.muted = wasMuted; });
+      });
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('touchstart', unlock);
+    window.addEventListener('keydown', unlock);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
+
   // Auto-attempt to start main menu BGM as soon as LOADING WORLD finishes
   // and the home screen is visible. Browsers may still block this on
   // very first load; we catch and ignore that case so it doesn't log errors.

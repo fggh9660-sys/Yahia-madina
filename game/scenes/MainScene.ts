@@ -20,6 +20,7 @@ import {
 } from '../../data/progress';
 import { evaluateAchievements, findAchievement, getTotalAchievements } from '../../data/achievements';
 import { getStageCliffhanger } from '../../data/stageCliffhangers';
+import { getNoorMemoryForPageCount } from '../../data/noorMemories';
 
 // Objects for Texture Generation
 import { Star } from '../objects/Star';
@@ -284,7 +285,7 @@ export class MainScene extends Phaser.Scene {
         dbg.__krSpawnChest = (theme: string) => this.eventManager.debugSpawnThemedChest(theme as ChallengeEvent);
         // M4 (TEMPORARY review aids): open a Lost Book page on demand, and reset all M4 progress.
         // From the console: window.__krLostBookPage()  /  window.__krResetProgress().
-        dbg.__krLostBookPage = () => this.showLostBookPage(true); // force: bypass stage-pacing gate for testing
+        dbg.__krLostBookPage = () => this.showLostBookPage(); // show one Lost Book beat on demand (testing)
         dbg.__krResetProgress = () => { resetProgress(); this.refreshM4Snapshot(); this.syncUI(); return 'M4 progress reset'; };
     } catch { /* ignore */ }
 
@@ -627,6 +628,7 @@ export class MainScene extends Phaser.Scene {
 
     if (currentSpeed > 0) {
         this.runDistance += frameMove * PROGRESS.DISTANCE_SCALE;
+        this.updateLostBookSchedule(); // M4-R2: distance-driven Curiosity→Knowledge beats (2–3 chains/stage)
     }
 
     // M3A-R1: Noor color-discovery moment — fires once, early in the first run, until the player has
@@ -2034,16 +2036,50 @@ export class MainScene extends Phaser.Scene {
    * NOTE: a 450m stage with ~200m rare-pickup cadence can only host ~1 chain — true 2–3 separated chains
    * per stage need longer stages (a Yahia design call; see the message to Nanda).
    */
-  private static readonly LOST_BOOK_MIN_SPACING_M = 150;
-  private static readonly LOST_BOOK_MAX_SPACING_M = 700;
-  private static readonly LOST_BOOK_FIRST_OFFSET_M = 100; // catches the first rare pickup (~120m)
-  private static readonly LOST_BOOK_MAX_BEATS_PER_STAGE = 6; // hard cap (~3 Q→A chains)
+  /**
+   * M4-R2 (Yahia 2026-06-25): Curiosity→Knowledge CHAINS per stage. Yahia wants ~2–3 chains/stage. Beats
+   * are now DRIVEN BY STAGE DISTANCE (not by collecting a rare fragment) — see updateLostBookSchedule() —
+   * so we can guarantee the exact count even in the short 450m/600m stages. Each chain = 2 beats (Q + A);
+   * beats are spread evenly across the stage (gap = stageLen/(beats+1)). Tunable per stage here.
+   */
+  private static readonly LOST_BOOK_CHAINS_PER_STAGE: Record<number, number> = { 1: 2, 2: 2, 3: 3 };
 
-  /** Authored length (m) of a stage, used to pace the Lost Book beats proportionally. */
+  /** Authored length (m) of a stage, used to spread the Lost Book beats evenly across it. */
   private lostBookStageLength(stage: number): number {
       if (stage >= 3) return PROGRESS.STAGE_3_LENGTH_M;
       if (stage === 2) return PROGRESS.STAGE_2_LENGTH_M;
       return PROGRESS.STAGE_1_LENGTH_M;
+  }
+
+  /**
+   * M4-R2: distance-driven Lost Book scheduler. Called every active-gameplay frame. Fires a Q/A beat each
+   * time the player covers another slice of the stage, guaranteeing LOST_BOOK_CHAINS_PER_STAGE chains per
+   * stage regardless of pickups. Re-inits per stage (and per run, via lostBookScheduleStage=0). Waits for a
+   * safe moment (no event/encounter/modal/results) so a beat never interrupts a set-piece.
+   */
+  private updateLostBookSchedule() {
+      if (this.currentStage !== this.lostBookScheduleStage) {
+          this.lostBookScheduleStage = this.currentStage;
+          this.lostBookBeatsThisStage = 0;
+          const chains = MainScene.LOST_BOOK_CHAINS_PER_STAGE[this.currentStage] ?? 2;
+          this.lostBookMaxBeats = chains * 2;
+          this.lostBookBeatSpacing = this.lostBookStageLength(this.currentStage) / (this.lostBookMaxBeats + 1);
+          this.lostBookNextBeatAt = this.runDistance + this.lostBookBeatSpacing;
+      }
+      if (this.lostBookBeatsThisStage >= this.lostBookMaxBeats) return;
+      if (this.runDistance < this.lostBookNextBeatAt) return;
+      // Only fire at a safe moment — otherwise wait (retry next frame, beat is NOT skipped). Normal running
+      // (incl. the desert INTRO_RUN intro and brief RECOVERY after a hit) is fine; only block on real
+      // set-pieces/encounters. Without allowing INTRO_RUN the desert's first beat slipped to ~270m and only
+      // 1 chain fit (Yahia 2026-06-25).
+      const phase = this.eventManager.eventPhase;
+      const safePhase = phase === 'NONE' || phase === 'INTRO_RUN' || phase === 'RECOVERY';
+      if (!safePhase || this.eventManager.isEncounterActive) return;
+      if (this.activeLostBookPage || this.activeFragmentLore || this.activeQuestion || this.activeMiniChallenge
+          || this.isPausedMenu || this.isGameOver || this.stageResults) return;
+      this.showLostBookPage();
+      this.lostBookBeatsThisStage++;
+      this.lostBookNextBeatAt = this.runDistance + this.lostBookBeatSpacing;
   }
 
   /**
@@ -2055,33 +2091,13 @@ export class MainScene extends Phaser.Scene {
    * Returns true if a modal was opened; false (nothing ripe + nothing new) lets the caller fall back
    * to the legacy lore card so rare pickups never feel empty. Freezes the world like showFragmentLore.
    */
-  public showLostBookPage(force: boolean = false): boolean {
+  public showLostBookPage(): boolean {
       if (this.activeLostBookPage || this.activeFragmentLore || this.activeQuestion || this.isPausedMenu || this.isGameOver) {
           return false;
       }
 
-      // M4-R2 stage-progress pacing gate (Yahia 2026-06-22). Only a few Q→A beats per stage, spaced far
-      // apart; between them the rare pickup falls back to world-lore (caller handles the false return).
-      // `force` (dev shortcut) bypasses the gate. The schedule re-inits whenever the stage changes — and
-      // because a new run resets currentStage to 1 while lostBookScheduleStage starts at 0, it re-inits
-      // for each run too.
-      if (!force) {
-          if (this.currentStage !== this.lostBookScheduleStage) {
-              // New stage → recompute the schedule from THIS stage's length so beats fit & spread.
-              this.lostBookScheduleStage = this.currentStage;
-              this.lostBookBeatsThisStage = 0;
-              const stageLen = this.lostBookStageLength(this.currentStage);
-              this.lostBookBeatSpacing = Phaser.Math.Clamp(
-                  Math.round(stageLen / 6), MainScene.LOST_BOOK_MIN_SPACING_M, MainScene.LOST_BOOK_MAX_SPACING_M,
-              );
-              this.lostBookMaxBeats = Phaser.Math.Clamp(
-                  Math.floor(stageLen / this.lostBookBeatSpacing) + 1, 2, MainScene.LOST_BOOK_MAX_BEATS_PER_STAGE,
-              );
-              this.lostBookNextBeatAt = this.runDistance + MainScene.LOST_BOOK_FIRST_OFFSET_M;
-          }
-          if (this.lostBookBeatsThisStage >= this.lostBookMaxBeats) return false;
-          if (this.runDistance < this.lostBookNextBeatAt) return false;
-      }
+      // Timing is driven by updateLostBookSchedule() (distance-based, per stage). This just decides which
+      // beat to show right now: pay off a ripe question → KNOWLEDGE, else plant/re-ask a CURIOSITY.
 
       // (1) Pay off a curiosity the player asked EARLIER THIS RUN and has since searched far enough → KNOWLEDGE.
       const ripeId = this.pickRipePendingCuriosity();
@@ -2145,11 +2161,6 @@ export class MainScene extends Phaser.Scene {
 
   /** M4-R1: build the modal view + freeze the world for either loop beat. */
   private openLostBookPage(page: LostBookPage, mode: 'curiosity' | 'knowledge') {
-      // M4-R2: a beat fired — advance the stage-pacing schedule by THIS stage's spacing (measured from
-      // here, so real spacing holds regardless of when the pickup actually landed).
-      this.lostBookBeatsThisStage++;
-      this.lostBookNextBeatAt = this.runDistance + this.lostBookBeatSpacing;
-
       this.activeLostBookPage = {
           id: page.id, chapter: page.chapter, page: page.page,
           story: page.story, curiosity: page.curiosity, knowledge: page.knowledge,
@@ -2188,6 +2199,13 @@ export class MainScene extends Phaser.Scene {
           this.audioManager?.playStarPitched(1400);
           this.checkChapterCompletion(view.chapter);
           this.checkAchievements();
+          // M4 (system 4): restoring a page may unlock a Noor visual-memory — her story deepens as the
+          // Lost Book is rebuilt. Delayed so it reads after the "new page!" feedback (and supersedes the
+          // generic chapter-complete line on the chapter's final page).
+          const memory = getNoorMemoryForPageCount(getRestoredPageCount());
+          if (memory) {
+              this.time.delayedCall(1100, () => this.showNoorMessage(memory.text, false, 'greet', memory.visual));
+          }
       }
       this.refreshM4Snapshot();
 
@@ -2268,11 +2286,11 @@ export class MainScene extends Phaser.Scene {
   }
 
   /** Show Nur and the message together. Pass optional NurState for expression; defaults to 'greet'. */
-  public showNoorMessage(text: string, isSoftPause: boolean = false, nurState: NurState = 'greet') {
+  public showNoorMessage(text: string, isSoftPause: boolean = false, nurState: NurState = 'greet', visual?: string) {
       if (this.currentNoorMessage && !isSoftPause && this.currentNoorMessage.isSoftPause) return;
       if (this.messageTimer) this.messageTimer.remove();
 
-      this.currentNoorMessage = { text, isSoftPause };
+      this.currentNoorMessage = { text, isSoftPause, visual };
       if (this.nurController) {
           this.nurController.show(nurState, { position: 'top' });
       }
@@ -2282,7 +2300,8 @@ export class MainScene extends Phaser.Scene {
           this.isSoftPaused = true;
           this.physics.world.timeScale = 0.15; // Slow down so player can read the jump hint (first time only)
       } else {
-          const duration = this.eventManager.eventPhase.startsWith('INTRO') || this.eventManager.eventPhase.startsWith('LEVEL') ? 4000 : 3000;
+          const base = this.eventManager.eventPhase.startsWith('INTRO') || this.eventManager.eventPhase.startsWith('LEVEL') ? 4000 : 3000;
+          const duration = visual ? 5200 : base; // M4: visual-memory beats linger a little longer so they read
           this.messageTimer = this.time.delayedCall(duration, () => this.hideNoorMessage());
       }
       this.syncUI();

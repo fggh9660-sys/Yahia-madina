@@ -164,18 +164,12 @@ export class CollisionManager {
       // Noor is now reserved for the 4 moments listed in feedback_yahia_scope_add_post_ship_pattern
       // (stage transitions, rare fragment discovery, low HP, major combo). The "rare discovery"
       // Noor line is fired here when the fragment is flagged isRare.
-      // M4: rare/discovery pickups now deliver a LOST BOOK PAGE (curiosity → knowledge loop) instead of
-      // a one-shot lore card. If every page is already restored, showLostBookPage() returns false and we
-      // fall back to the legacy lore card so late-game rare pickups still pay off. Non-rare pickups keep
-      // the lore-card behaviour (world-expansion flavour).
+      // M4-R2 (Yahia 2026-06-25): the Lost Book curiosity→knowledge loop is now DRIVEN BY STAGE DISTANCE
+      // (MainScene.updateLostBookSchedule) so it hits an exact 2–3 chains/stage regardless of pickups. Rare
+      // pickups therefore go back to delivering a world-lore card (the intro seed included) — they no longer
+      // trigger Lost Book pages.
       const lore = f.loreId ? findLoreFragment(f.loreId) : undefined;
-      let shownPage = false;
-      // The very first rare pickup keeps its dedicated Lost Book INTRO card (the mystery seed);
-      // every rare pickup after that delivers a Lost Book page (curiosity → knowledge).
-      if (f.isRare && f.loreId !== 'lost-book-intro') {
-          shownPage = this.scene.showLostBookPage();
-      }
-      if (!shownPage && lore) {
+      if (lore) {
           this.scene.showFragmentLore({ id: lore.id, title: lore.title, body: lore.body }, f.isRare);
       }
 

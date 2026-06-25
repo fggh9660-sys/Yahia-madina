@@ -1,7 +1,7 @@
 import React from 'react';
 import { LORE_FRAGMENTS, LoreFragment } from '../data/loreFragments';
 import { isCollected, getCollectedCount, getTotalPossible, getCompletionPercent } from '../data/collectionState';
-import { LOST_BOOK_CHAPTERS, getPagesForChapter, getTotalPages, getChapterRestoredCount } from '../data/lostBook';
+import { LOST_BOOK_CHAPTERS, LOST_BOOK_PAGES, getPagesForChapter, getTotalPages, getChapterRestoredCount } from '../data/lostBook';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { isPageRestored, getRestoredPageCount, isAchievementUnlocked } from '../data/progress';
 
@@ -27,6 +27,21 @@ export const BookOfNoorModal: React.FC<Props> = ({ onClose }) => {
     const pagesRestored = getRestoredPageCount();
     const totalPages = getTotalPages();
     const pagePercent = totalPages === 0 ? 0 : Math.min(100, Math.round((pagesRestored / totalPages) * 100));
+
+    // M4 (systems 6 & 10): Discoveries & Mysteries — uncovered count by scale + the overarching thread.
+    const mysteryScale = (scale: 'small' | 'medium' | 'major') => {
+        const all = LOST_BOOK_PAGES.filter(p => p.mystery === scale);
+        return { found: all.filter(p => isPageRestored(p.id)).length, total: all.length };
+    };
+    const MYSTERY_TIERS = [
+        { scale: 'small' as const, icon: '🔹', label: 'إشارات صغيرة' },
+        { scale: 'medium' as const, icon: '🔸', label: 'أسرار غامضة' },
+        { scale: 'major' as const, icon: '🌟', label: 'أسرار كبرى' },
+    ];
+    const overarchingTeaser =
+        pagePercent >= 100 ? 'كل الصفحات عادت… لكنّ سرّ الكتاب الأكبر ينتظر الفصول القادمة.'
+        : pagePercent >= 50 ? 'الخيط يتّضح شيئاً فشيئاً… من كتب الكتاب المفقود، ولماذا تفرّقت صفحاته؟'
+        : 'ثمّة سرٌّ يربط كل هذه الاكتشافات… واصل لتكشفه.';
 
     // Fragment sections (world-expansion lore).
     const stage1 = LORE_FRAGMENTS.filter(f => f.stage === 1);
@@ -70,6 +85,24 @@ export const BookOfNoorModal: React.FC<Props> = ({ onClose }) => {
                         className="h-full bg-gradient-to-r from-[#ffd66b] to-[#ffd700] transition-all duration-500"
                         style={{ width: `${pagePercent}%` }}
                     />
+                </div>
+
+                {/* ── Discoveries & Mysteries (systems 6 & 10) ─────────────────── */}
+                <div className="mb-5 rounded-xl border border-[#ffd700]/20 bg-black/20 p-3">
+                    <h4 className="text-sm md:text-base font-bold text-[#ffd700] mb-2">🔍 الاكتشافات والأسرار</h4>
+                    <div className="grid grid-cols-3 gap-2 mb-2.5">
+                        {MYSTERY_TIERS.map(t => {
+                            const { found, total } = mysteryScale(t.scale);
+                            return (
+                                <div key={t.scale} className="flex flex-col items-center rounded-lg bg-white/5 border border-white/10 py-2">
+                                    <span className="text-lg leading-none mb-1">{t.icon}</span>
+                                    <span className="text-[10px] md:text-xs text-white/60 text-center leading-tight">{t.label}</span>
+                                    <span className="text-sm font-black text-white font-mono mt-0.5">{found}/{total}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <p className="text-[11px] md:text-xs text-white/70 italic text-center leading-relaxed">{overarchingTeaser}</p>
                 </div>
 
                 <div className="space-y-2.5 mb-6">

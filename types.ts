@@ -5,6 +5,8 @@ export interface NoorMessage {
     text: string;
     duration?: number; // ms, default 3000
     isSoftPause?: boolean; // If true, requires tap to dismiss/resume
+    /** M4 (system 4): optional visual-memory key shown beside Noor (emoji placeholder; final art = Yahia). */
+    visual?: string;
 }
 
 // --- MINI PUZZLES (Storm / Library / Dual Path) ---

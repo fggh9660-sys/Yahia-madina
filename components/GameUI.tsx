@@ -38,6 +38,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
   // Noor Guide State
   const [showNoor, setShowNoor] = useState(false);
   const [noorText, setNoorText] = useState('');
+  const [noorVisual, setNoorVisual] = useState(''); // M4 (system 4): visual-memory placeholder beside Noor
 
   // Stage title: optional fade-out before clearing (keep title visible for fade-out)
   const [stageTitleDisplay, setStageTitleDisplay] = useState<string | null>(null);
@@ -48,6 +49,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
   useEffect(() => {
     if (gameState.noorMessage) {
         setNoorText(gameState.noorMessage.text);
+        setNoorVisual(gameState.noorMessage.visual ?? '');
         setShowNoor(true);
     } else {
         setShowNoor(false);
@@ -187,6 +189,11 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
         className={`absolute top-36 left-0 right-0 z-30 flex justify-center pointer-events-none transition-all duration-500 transform ${showNoor ? 'translate-y-0 opacity-100' : '-translate-y-10 opacity-0'}`}
       >
           <div className="bg-[#1a1625]/92 backdrop-blur-md border border-[#ffd700]/40 px-4 py-3 rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.35)] max-w-[90%] md:max-w-md animate-in slide-in-from-top-4 duration-500">
+             {noorVisual ? (
+                 <div className="flex justify-center mb-1.5">
+                     <span className="text-3xl md:text-4xl drop-shadow-[0_2px_8px_rgba(255,215,0,0.35)]">{noorVisual}</span>
+                 </div>
+             ) : null}
              <p className="text-white font-bold text-sm md:text-base leading-relaxed text-center">
                  {noorText}
              </p>
