@@ -5,9 +5,9 @@ import { Platform } from '../objects/Platform';
 import { Foreground } from '../objects/Foreground';
 import { RoadsideArchitecture } from '../objects/RoadsideArchitecture';
 import { MainScene } from '../scenes/MainScene';
-import { PROGRESS } from '../../constants';
+import { PROGRESS, BRIDGE_WIND, BRIDGE_COLLAPSE } from '../../constants';
 
-export type WorldZone = 'DESERT' | 'TRANSITION' | 'CITY' | 'LIBRARY';
+export type WorldZone = 'DESERT' | 'TRANSITION' | 'CITY' | 'LIBRARY' | 'OBSERVATORY';
 /** Visual sub‑zones inside the city – used for Step 5 environment progression. */
 export type CitySegment = 'CITY_ENTRANCE' | 'CITY_STREET' | 'CITY_MARKET' | 'CITY_BAYT';
 
@@ -21,7 +21,9 @@ export class EnvironmentManager {
   private currentZone: WorldZone = 'DESERT';
   private cityStartDistance: number = 0;
   private libraryStartDistance: number = 0;
+  private observatoryStartDistance: number = 0;
   private hasTriggeredLibrary: boolean = false;
+  private hasTriggeredBridgeWind: boolean = false;
   /** Current visual segment while in CITY (entrance → streets → market → Bayt). */
   private citySegment: CitySegment = 'CITY_ENTRANCE';
 
@@ -45,12 +47,14 @@ export class EnvironmentManager {
     this.checkZoneProgression();
   }
 
-  /** Distance in meters into city before library – longer so player spends more time in city (tunable) */
-  private readonly LIBRARY_TRIGGER_DISTANCE = 420;
+  /** Distance in meters into city before library – longer so player spends more time in city (tunable)
+   *  M2-R3 (Yahia 2026-05-31): pulled from 520 → 450 so library segment has 150m of run instead of
+   *  80m before stage end. Combined with slower puzzle pacing this lets the library breathe. */
+  private readonly LIBRARY_TRIGGER_DISTANCE = 450;
   /** Distance bands inside Stage 2 (city) to drive visual progression. */
-  private readonly CITY_ENTRANCE_MAX = 180;  // Just inside the gate
-  private readonly CITY_STREET_MAX = 350;   // Simple streets
-  private readonly CITY_MARKET_MAX = 520;   // Market / dense core (Bayt after this)
+  private readonly CITY_ENTRANCE_MAX = 160;  // Just inside the gate
+  private readonly CITY_STREET_MAX = 300;   // Simple streets
+  private readonly CITY_MARKET_MAX = 450;   // Market / dense core (Bayt after this) — matches LIBRARY_TRIGGER_DISTANCE
 
   private checkZoneProgression() {
       if (this.currentZone === 'CITY') {
@@ -68,7 +72,16 @@ export class EnvironmentManager {
               this.citySegment = 'CITY_BAYT';
           }
 
-          // 2) Library trigger (Bayt Al‑Hikma entry) – only mark done when discovery actually runs
+          // 2) Bridge set-piece — collapsing-bridge variant per Yahia 2026-05-22 pivot. Wind
+          //    variant code retained in EventManager but no longer triggered. Phase auto-exits
+          //    after segment length. Restart from city entrance on fall.
+          if (!this.hasTriggeredBridgeWind && distInCity >= BRIDGE_COLLAPSE.TRIGGER_DISTANCE_IN_CITY_M) {
+              if (this.scene.eventManager.triggerBridgeCollapse()) {
+                  this.hasTriggeredBridgeWind = true;
+              }
+          }
+
+          // 3) Library trigger (Bayt Al‑Hikma entry) – only mark done when discovery actually runs
           if (!this.hasTriggeredLibrary && distInCity >= this.LIBRARY_TRIGGER_DISTANCE) {
               if (this.scene.eventManager.triggerLibraryDiscovery()) {
                   this.hasTriggeredLibrary = true;
@@ -133,6 +146,24 @@ export class EnvironmentManager {
   public finalizeCityTransition() {
       this.currentZone = 'CITY';
       // Reset flags for loop if needed, or advance stage
+  }
+
+  /** M3B — Stage 3: enter the Observatory zone. Swaps ground to polished star-stone and fades the
+   *  background into the observatory domes/colonnade. */
+  public transitionToObservatory() {
+      if (this.currentZone === 'OBSERVATORY') return;
+
+      this.currentZone = 'OBSERVATORY';
+      this.observatoryStartDistance = this.scene.getRunDistance();
+
+      this.background.transitionToObservatory(2500);
+      this.platform.transitionTexture('ground_observatory');
+  }
+
+  /** Distance in meters run while in the Observatory (Stage 3). */
+  public getObservatoryRunDistance(): number {
+      if (this.currentZone !== 'OBSERVATORY') return 0;
+      return Math.max(0, this.scene.getRunDistance() - this.observatoryStartDistance);
   }
 
   public resize(width: number, height: number) {

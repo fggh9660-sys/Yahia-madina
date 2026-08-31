@@ -1,8 +1,17 @@
 
 import Phaser from 'phaser';
+import { SKILL } from '../../constants';
+
+/** Smallest axis-aligned distance between two arcade bodies. 0 = overlap, positive = gap in px. */
+function aabbDistance(a: Phaser.Physics.Arcade.Body, b: Phaser.Physics.Arcade.Body): number {
+  const dx = Math.max(0, Math.max(a.x - (b.x + b.width), b.x - (a.x + a.width)));
+  const dy = Math.max(0, Math.max(a.y - (b.y + b.height), b.y - (a.y + a.height)));
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
 export type ObstacleType = 'spikes' | 'rock' | 'pillar' | 'orb' | 'snake' | 'wall' | 'falcon' | 'cactus' | 'archway' | 'scorpion' | 'viper' | 'arfaj' | 'book_pile'
-  | 'pillar_city' | 'rock_city' | 'spikes_city';
+  | 'pillar_city' | 'rock_city' | 'spikes_city'
+  | 'telescope';
 
 export class Obstacle extends Phaser.Physics.Arcade.Sprite {
   declare body: Phaser.Physics.Arcade.Body;
@@ -17,6 +26,12 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
   private obstacleType: ObstacleType;
   private moveSpeedModifier: number = 0;
 
+  // Near-miss tracking (sub-slice 1 of skill depth phase)
+  private closestDistance: number = Number.POSITIVE_INFINITY;
+  private nearMissResolved: boolean = false;
+  /** Set externally by CollisionManager when the player actually hits this obstacle. */
+  public wasHit: boolean = false;
+
   constructor(scene: Phaser.Scene, x: number, y: number, type: ObstacleType) {
     super(scene, x, y, `obs_${type}`);
     this.obstacleType = type;
@@ -25,13 +40,25 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
 
     // CRITICAL: Obstacles must be above background (Negative) and Ground (0)
-    this.setDepth(5); 
+    this.setDepth(5);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
     body.setImmovable(true);
 
     this.setupTypeSpecifics();
+
+    // Pass B telegraphing: gentle fade-in so obstacles don't pop into view.
+    // Skip orb because it has its own glow tween on alpha — they would fight.
+    if (type !== 'orb') {
+      this.alpha = 0;
+      scene.tweens.add({
+        targets: this,
+        alpha: 1,
+        duration: 220,
+        ease: 'Sine.easeOut',
+      });
+    }
   }
 
   private setupTypeSpecifics() {
@@ -43,6 +70,7 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(48, 24);
         body.setOffset(8, 40);
+        this.addIdleTelegraph();
         break;
 
       case 'pillar':
@@ -50,6 +78,15 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(30, 80);
         body.setOffset(17, 16);
+        this.addIdleTelegraph();
+        break;
+
+      case 'telescope':
+        // Stage 3 signature obstacle — tripod-mounted telescope. Forgiving hitbox around the base.
+        this.setOrigin(0.5, 1);
+        body.setSize(34, 60);
+        body.setOffset(15, 36);
+        this.addIdleTelegraph();
         break;
 
       case 'rock':
@@ -57,11 +94,15 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(40, 40);
         body.setOffset(12, 24);
+        this.addIdleTelegraph();
         break;
 
+      // Orb hitbox bug fix (bundled with Pass B):
+      // Old setCircle(18, 15, 15) placed the bounding box at (15,15)..(51,51) on a 48x48 canvas — past the edge.
+      // Centered correctly so the collision shape matches the visible orb.
       case 'orb':
         this.setOrigin(0.5, 0.5);
-        body.setCircle(18, 15, 15);
+        body.setCircle(18, 6, 6);
         this.addFloatAnimation();
         this.addGlowAnimation();
         break;
@@ -84,26 +125,31 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(32, 60);
         body.setOffset(16, 4);
+        this.addIdleTelegraph();
         break;
 
+      // Falcon: subtle red tint to signal "danger" + the off-screen incoming warning fires from SpawnManager.
       case 'falcon':
         this.setOrigin(0.5, 0.5);
         body.setSize(60, 30);
         body.setOffset(18, 30);
-        this.addFloatAnimation(15, 600); 
-        this.moveSpeedModifier = 120; 
+        this.addFloatAnimation(15, 600);
+        this.moveSpeedModifier = 120;
+        this.setTint(0xffcccc);
         break;
 
       case 'cactus':
         this.setOrigin(0.5, 1);
         body.setSize(25, 55);
         body.setOffset(19, 9);
+        this.addIdleTelegraph();
         break;
 
       case 'archway':
         this.setOrigin(0.5, 1);
         body.setSize(40, 85);
-        body.setOffset(44, 43); 
+        body.setOffset(44, 43);
+        this.addIdleTelegraph();
         break;
 
       case 'scorpion':
@@ -140,14 +186,29 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
         this.setOrigin(0.5, 1);
         body.setSize(50, 35);
         body.setOffset(7, 29);
+        this.addIdleTelegraph();
         break;
-        
+
       case 'book_pile':
         this.setOrigin(0.5, 1);
         body.setSize(50, 45); // Roughly the pile size
         body.setOffset(15, 35);
+        this.addIdleTelegraph();
         break;
     }
+  }
+
+  // Pass B: gentle scale pulse for currently-static obstacles so the eye can catch them at speed.
+  // Already-animated types (orb, snake, scorpion, viper, falcon) get their own motion and skip this.
+  private addIdleTelegraph() {
+    this.scene.tweens.add({
+      targets: this,
+      scaleY: { from: 1, to: 1.04 },
+      duration: 1400,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   private addFloatAnimation(distance: number = 20, duration: number = 1500) {
@@ -173,8 +234,35 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
   }
 
   update(speed: number) {
-    this.x -= (speed + (this.moveSpeedModifier * (speed/350)));
-    
+    this.x -= (speed + (this.moveSpeedModifier * (speed / 350)));
+
+    // Near-miss tracking — runs while obstacle is in the play area
+    if (!this.nearMissResolved && this.body) {
+      const sceneAny = this.scene as Phaser.Scene & { player?: { x: number; body?: Phaser.Physics.Arcade.Body } };
+      const player = sceneAny.player;
+      if (player && player.body) {
+        const d = aabbDistance(player.body, this.body as Phaser.Physics.Arcade.Body);
+        if (d < this.closestDistance) this.closestDistance = d;
+
+        // When the obstacle's right edge has cleared past the player's left edge by the threshold,
+        // it counts as "passed". Time to decide near-miss vs not.
+        const obstacleRight = this.body.x + this.body.width;
+        const playerLeft = player.body.x;
+        if (obstacleRight < playerLeft - SKILL.NEAR_MISS_PASS_THRESHOLD_PX) {
+          this.nearMissResolved = true;
+          // Fire clean-clear event only when the player avoided this obstacle entirely.
+          // wasNearMiss=true on top of clean clear adds the near-miss juice + bonus.
+          if (!this.wasHit) {
+            const wasNearMiss = this.closestDistance > 0 && this.closestDistance < SKILL.NEAR_MISS_THRESHOLD;
+            const handler = (this.scene as Phaser.Scene & {
+              onObstacleCleared?: (wasNearMiss: boolean, x: number, y: number, obstacle?: Obstacle) => void;
+            }).onObstacleCleared;
+            if (typeof handler === 'function') handler.call(this.scene, wasNearMiss, this.x, this.y, this);
+          }
+        }
+      }
+    }
+
     if (this.x < -100) {
       this.destroy();
     }
@@ -197,6 +285,58 @@ export class Obstacle extends Phaser.Physics.Arcade.Sprite {
     this.generateViper(scene);
     this.generateArfaj(scene);
     this.generateBookPile(scene);
+    this.generateTelescope(scene);
+  }
+
+  /** M3B — Stage 3 signature obstacle: a brass telescope on a tripod, barrel angled to the sky. */
+  private static generateTelescope(scene: Phaser.Scene) {
+    if (scene.textures.exists('obs_telescope')) return;
+    const W = 64, H = 96;
+    const canvas = scene.textures.createCanvas('obs_telescope', W, H);
+    if (!canvas) return;
+    const ctx = canvas.context;
+    const cx = 32;
+
+    // Tripod legs
+    ctx.strokeStyle = '#2b2350';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(cx, H - 44); ctx.lineTo(cx - 18, H - 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, H - 44); ctx.lineTo(cx + 18, H - 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, H - 44); ctx.lineTo(cx, H - 6); ctx.stroke();
+    // leg feet
+    ctx.fillStyle = '#1b1633';
+    ctx.fillRect(cx - 22, H - 6, 8, 5);
+    ctx.fillRect(cx + 14, H - 6, 8, 5);
+    ctx.fillRect(cx - 4, H - 8, 8, 5);
+
+    // Pivot head
+    ctx.fillStyle = '#241c44';
+    ctx.beginPath(); ctx.arc(cx, H - 48, 8, 0, Math.PI * 2); ctx.fill();
+
+    // Barrel — angled up to the right
+    ctx.save();
+    ctx.translate(cx, H - 48);
+    ctx.rotate(-Math.PI / 4);
+    const grd = ctx.createLinearGradient(-9, 0, 9, 0);
+    grd.addColorStop(0, '#3a2f63');
+    grd.addColorStop(0.5, '#5b4a9e');
+    grd.addColorStop(1, '#2b2350');
+    ctx.fillStyle = grd;
+    ctx.fillRect(-9, -52, 18, 60);
+    // gold rings
+    ctx.fillStyle = '#ffd86b';
+    ctx.fillRect(-9, -52, 18, 5);
+    ctx.fillRect(-9, -28, 18, 3);
+    // lens glow
+    ctx.fillStyle = 'rgba(143,184,255,0.7)';
+    ctx.fillRect(-7, -50, 14, 3);
+    ctx.restore();
+
+    // faint star sparkle near the lens
+    ctx.fillStyle = 'rgba(255,216,107,0.8)';
+    ctx.beginPath(); ctx.arc(54, 18, 1.5, 0, Math.PI * 2); ctx.fill();
+
+    canvas.refresh();
   }
 
   private static generateSpikes(scene: Phaser.Scene) {

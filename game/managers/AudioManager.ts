@@ -39,10 +39,13 @@ export class AudioManager {
     this._musicEnabled = options.musicEnabled ?? (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_MUSIC) !== '0');
   }
 
-  private playOneShot(key: string, volume: number = SFX_VOLUME): void {
+  private playOneShot(key: string, volume: number = SFX_VOLUME, detune: number = 0): void {
     if (!this._soundEnabled) return;
     if (!this.scene.cache.audio.exists(key)) return;
-    this.scene.sound.add(key).play({ volume });
+    const snd = this.scene.sound.add(key);
+    snd.once(Phaser.Sound.Events.COMPLETE, () => snd.destroy());
+    snd.once(Phaser.Sound.Events.STOP, () => snd.destroy());
+    snd.play({ volume, detune });
   }
 
   /** Stop any long-playing/looping audio (sandstorm, magic-gate) so they never overlap. */
@@ -95,6 +98,11 @@ export class AudioManager {
   /** Collected a star. */
   playStar(): void {
     this.playOneShot('sfx_star');
+  }
+
+  /** Near-miss cue with optional pitch shift (cents). Used for combo-tier escalation. */
+  playStarPitched(detune: number): void {
+    this.playOneShot('sfx_star', SFX_VOLUME, detune);
   }
 
   /** Collected an extra heart (life). */

@@ -5,9 +5,14 @@ import { Player } from '../objects/Player';
 import { Star } from '../objects/Star';
 import { Heart } from '../objects/Heart';
 import { ShieldItem } from '../objects/ShieldItem';
+import { SpeedBoost } from '../objects/SpeedBoost';
 import { RewardBox } from '../objects/RewardBox';
 import { MarketAwning } from '../objects/MarketAwning';
 import { MagicCarpet } from '../objects/MagicCarpet';
+import { KnowledgeFragment } from '../objects/KnowledgeFragment';
+import { KNOWLEDGE_FRAGMENT } from '../../constants';
+import { findLoreFragment } from '../../data/loreFragments';
+import { addToCollection, consumeNewMilestone, getCollectedCount, getTotalPossible } from '../../data/collectionState';
 
 export class CollisionManager {
   private scene: MainScene;
@@ -37,6 +42,7 @@ export class CollisionManager {
     this.scene.physics.add.collider(player, spawn.merchantCarts);
     this.scene.physics.add.collider(player, spawn.rugStacks);
     this.scene.physics.add.overlap(player, spawn.obstacles, this.handleHitObstacle, undefined, this);
+    this.scene.physics.add.overlap(player, spawn.fallingDebris, this.handleHitObstacle, undefined, this);
 
     // Fountain Collision (Solid, No Damage)
     if (env.roadside && env.roadside.fountains) {
@@ -47,6 +53,8 @@ export class CollisionManager {
     this.scene.physics.add.overlap(player, spawn.stars, this.handleCollectStar, undefined, this);
     this.scene.physics.add.overlap(player, spawn.heartsGroup, this.handleCollectHeart, undefined, this);
     this.scene.physics.add.overlap(player, spawn.shieldsGroup, this.handleCollectShield, undefined, this);
+    this.scene.physics.add.overlap(player, spawn.speedBoosts, this.handleCollectSpeedBoost, undefined, this);
+    this.scene.physics.add.overlap(player, spawn.knowledgeFragments, this.handleCollectKnowledgeFragment, undefined, this);
     this.scene.physics.add.overlap(player, spawn.rewardBoxesGroup, this.handleCollectRewardBox, undefined, this);
 
     // Magic Carpet Pickup (New)
@@ -139,9 +147,54 @@ export class CollisionManager {
       (box as RewardBox).collect();
   }
 
+  private handleCollectSpeedBoost(player: any, boost: any) {
+      (boost as SpeedBoost).collect();
+      this.scene.triggerSpeedBoost();
+      this.scene.showFloatingText((boost as SpeedBoost).x, (boost as SpeedBoost).y, `+ سرعة!`, '#ffaa00');
+  }
+
+  private handleCollectKnowledgeFragment(player: any, frag: any) {
+      const f = frag as KnowledgeFragment;
+      f.collect();
+      this.scene.addScore(KNOWLEDGE_FRAGMENT.COLLECT_SCORE);
+      this.scene.showFloatingText(f.x, f.y, `+معرفة 📖`, '#4dd0ff');
+      this.scene.audioManager?.playStarPitched(1200);
+
+      // M2-R1: surface the lore via dedicated full-pause modal instead of Noor message.
+      // Noor is now reserved for the 4 moments listed in feedback_yahia_scope_add_post_ship_pattern
+      // (stage transitions, rare fragment discovery, low HP, major combo). The "rare discovery"
+      // Noor line is fired here when the fragment is flagged isRare.
+      // M4-R2 (Yahia 2026-06-25): the Lost Book curiosity→knowledge loop is now DRIVEN BY STAGE DISTANCE
+      // (MainScene.updateLostBookSchedule) so it hits an exact 2–3 chains/stage regardless of pickups. Rare
+      // pickups therefore go back to delivering a world-lore card (the intro seed included) — they no longer
+      // trigger Lost Book pages.
+      const lore = f.loreId ? findLoreFragment(f.loreId) : undefined;
+      if (lore) {
+          this.scene.showFragmentLore({ id: lore.id, title: lore.title, body: lore.body }, f.isRare);
+      }
+
+      // M3A: track persistent collection + fire milestone reward if a threshold is crossed.
+      if (lore && addToCollection(lore.id)) {
+          this.scene.onCollectionProgress?.(getCollectedCount(), getTotalPossible());
+          const milestone = consumeNewMilestone();
+          if (milestone) {
+              this.scene.addScore(milestone.stars);
+              this.scene.showFloatingText(this.scene.player.x, this.scene.player.y - 130, `🎉 ${milestone.label}`, '#ffd700');
+              this.scene.audioManager?.playStarPitched(1500);
+          }
+      }
+  }
+
   private handleHitObstacle(player: any, obstacle: any) {
     const p = player as Player;
     const tookDamage = p.takeDamage(() => {});
+
+    // Mark the obstacle as physically contacted so its near-miss check won't fire later.
+    // Even if no damage was taken (shield/invulnerable), the player passed THROUGH, not NEAR.
+    if (obstacle && typeof obstacle === 'object' && 'wasHit' in obstacle) {
+        (obstacle as { wasHit: boolean }).wasHit = true;
+    }
+
     if (tookDamage) {
         this.scene.damagePlayer();
         this.scene.cameras.main.shake(200, 0.015);

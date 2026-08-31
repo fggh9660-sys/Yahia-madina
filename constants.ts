@@ -1,26 +1,68 @@
-// Fallback to 800x600 if window dimensions are reported as 0 (e.g. headless/unmounted state)
 export const GAME_WIDTH = window.innerWidth > 0 ? window.innerWidth : 800;
 export const GAME_HEIGHT = window.innerHeight > 0 ? window.innerHeight : 600;
 
-// Camera tuning – zoom in slightly so the road and obstacles feel larger.
 export const GAMEPLAY_CAMERA_ZOOM = 1.10;
 
-/** Ground: run surface is this many pixels from the bottom (raised = larger value). */
+export const MOBILE_BREAKPOINT_PX = 600;
+export const SHORT_HEIGHT_BREAKPOINT_PX = 500;
+
+export const GAMEPLAY_CAMERA_ZOOM_LANDSCAPE_MOBILE = 1.10;
+export const GAMEPLAY_CAMERA_ZOOM_PORTRAIT_MOBILE = 1.10;
+
+export function getGameplayCameraZoom(viewWidth: number, viewHeight: number): number {
+  if (viewHeight < SHORT_HEIGHT_BREAKPOINT_PX) return GAMEPLAY_CAMERA_ZOOM_LANDSCAPE_MOBILE;
+  if (viewWidth < MOBILE_BREAKPOINT_PX) return GAMEPLAY_CAMERA_ZOOM_PORTRAIT_MOBILE;
+  return GAMEPLAY_CAMERA_ZOOM;
+}
+
+export const TOUCH_BTN = {
+  SIZE_DESKTOP: 84,
+  SIZE_COMPACT: 56,
+  EDGE_MARGIN_DESKTOP: 80,
+  EDGE_MARGIN_COMPACT: 52,
+  EDGE_MARGIN_PORTRAIT: 48,
+  BOTTOM_MARGIN_DESKTOP: 28,
+  BOTTOM_MARGIN_COMPACT: 22,
+  BOTTOM_MARGIN_PORTRAIT: 64,
+  GAP_DESKTOP: 48,
+  GAP_COMPACT: 16,
+  ICON_SIZE_DESKTOP: 36,
+  ICON_SIZE_COMPACT: 24,
+};
+
+export function getTouchButtonLayout(viewWidth: number, viewHeight: number) {
+  const isLandscapeShort = viewHeight < SHORT_HEIGHT_BREAKPOINT_PX;
+  const isPortraitMobile = viewWidth < MOBILE_BREAKPOINT_PX && !isLandscapeShort;
+  const isCompact = isLandscapeShort || isPortraitMobile;
+  return {
+    size: isCompact ? TOUCH_BTN.SIZE_COMPACT : TOUCH_BTN.SIZE_DESKTOP,
+    edgeMargin: isPortraitMobile
+      ? TOUCH_BTN.EDGE_MARGIN_PORTRAIT
+      : isCompact
+        ? TOUCH_BTN.EDGE_MARGIN_COMPACT
+        : TOUCH_BTN.EDGE_MARGIN_DESKTOP,
+    gap: isCompact ? TOUCH_BTN.GAP_COMPACT : TOUCH_BTN.GAP_DESKTOP,
+    iconSize: isCompact ? TOUCH_BTN.ICON_SIZE_COMPACT : TOUCH_BTN.ICON_SIZE_DESKTOP,
+    bottomMargin: isPortraitMobile
+      ? TOUCH_BTN.BOTTOM_MARGIN_PORTRAIT
+      : isCompact
+        ? TOUCH_BTN.BOTTOM_MARGIN_COMPACT
+        : TOUCH_BTN.BOTTOM_MARGIN_DESKTOP,
+  };
+}
+
 export const RUN_SURFACE_FROM_BOTTOM = 182;
 export const GROUND_TILE_HEIGHT = 128;
 
-/** Y coordinate of the run surface (top of ground). */
 export function getGroundY(screenHeight: number): number {
   return screenHeight - RUN_SURFACE_FROM_BOTTOM;
 }
 
-/** Player spawn Y so feet sit on the run surface (accounts for body offset). */
 export function getPlayerSpawnY(screenHeight: number): number {
   const FEET_BELOW_ORIGIN = 39;
   return getGroundY(screenHeight) - FEET_BELOW_ORIGIN;
 }
 
-/** Player spawn/reset X – accurate on both PC and mobile. */
 export function getPlayerStartX(viewWidth: number): number {
   const MOBILE_BREAKPOINT = 600;
   const DESKTOP_X = 135;
@@ -30,17 +72,270 @@ export function getPlayerStartX(viewWidth: number): number {
   return Math.max(min, Math.round(viewWidth * pct));
 }
 
-// Physics Tuning - "Variable Height"
 export const PHYSICS = {
-  GRAVITY: 2000,        // Heavy gravity for a snappy 0.7s jump
-  JUMP_FORCE: -800,    // Force calculated to give ~0.7s hang time with the new gravity
-  RUN_SPEED: 350,       // Normal/max run speed
-  RUN_SPEED_START: 290, // Slower start so player can read the environment
-  COYOTE_TIME: 100,     // ms
-  BUFFER_TIME: 150,     // ms
+  GRAVITY: 1800,
+  JUMP_FORCE: -800,
+  RUN_SPEED: 350,
+  RUN_SPEED_START: 290,
+  COYOTE_TIME: 100,
+  BUFFER_TIME: 150,
+
+  APEX_HANG_MS: 70,
+  APEX_VY_THRESHOLD: 80,
+
+  FALL_GRAVITY_MULTIPLIER: 1.5,
+
+  LOW_JUMP_MULTIPLIER: 2.5,
+  VARIABLE_JUMP_CAP: -600,
+
+  AIR_NUDGE_SPEED: 220,
+  AIR_NUDGE_MAX_OFFSET: 80,
 };
 
-/** Distance in meters with no obstacles at run start (tutorial: Nur explains jump first). */
+export const SKILL = {
+  NEAR_MISS_THRESHOLD: 28,
+  NEAR_MISS_BONUS: 5,
+  NEAR_MISS_SHAKE_MS: 80,
+  NEAR_MISS_SHAKE_INTENSITY_X: 0.004,
+  NEAR_MISS_PASS_THRESHOLD_PX: 30,
+};
+
+export const HITSTOP = {
+  TIER_UP_MS: 70,
+  TIER_UP_SCALE: 0.6,
+  PERFECT_JUMP_MS: 40,
+  PERFECT_JUMP_SCALE: 0.7,
+};
+
+export const PERFECT_JUMP = {
+  VY_THRESHOLD: 220,
+  BONUS: 8,
+  DETUNE: 1200,
+  PARTICLE_COUNT: 10,
+  PARTICLE_LIFESPAN_MS: 420,
+  PARTICLE_SPEED_MIN: 60,
+  PARTICLE_SPEED_MAX: 160,
+  PARTICLE_COLOR: 0xffd700,
+  SHAKE_MS: 90,
+  SHAKE_INTENSITY_Y: 0.006,
+};
+
+export const COMBO = {
+  TIER_2_AT: 3,
+  TIER_3_AT: 6,
+  TIER_4_AT: 10,
+  MULTIPLIERS: [1, 2, 3, 4] as const,
+  TIER_COLORS: ['#ffffff', '#00f2ff', '#ffd700', '#ff4d4d'] as const,
+  TIER_TINTS: [0xffffff, 0x00f2ff, 0xffd700, 0xff4d4d] as const,
+  TIER_DETUNE: [0, 200, 400, 700] as const,
+  HUD_X_RATIO: 0.5,
+  HUD_Y: 100,
+  TICK_PULSE_SCALE: 1.08,
+  TICK_PULSE_MS: 120,
+  TIER_UP_PULSE_SCALE: 1.5,
+  TIER_UP_PULSE_MS: 250,
+  AURA_ALPHA: [0, 0.35, 0.55, 0.75] as const,
+};
+
+export const SPEED_LINES = {
+  TIER_ALPHA_MAX: [0, 0.18, 0.32, 0.48] as const,
+  TIER_FREQUENCY_MS: [0, 220, 130, 70] as const,
+  STREAK_W: 56,
+  STREAK_H: 2,
+  STREAK_SPEED_MIN: -880,
+  STREAK_SPEED_MAX: -560,
+  STREAK_LIFESPAN_MS: 620,
+  TOP_BAND_RATIO: 0.18,
+  BOTTOM_BAND_RATIO: 0.82,
+  BAND_HEIGHT_RATIO: 0.12,
+};
+
+export const BOND_HUD = {
+  Y: 138,
+  WIDTH: 240,
+  HEIGHT: 16,
+  PADDING: 2,
+  BG_COLOR: 0x1a1625,
+  FILL_COLOR: 0xffd700,
+  BORDER_COLOR: 0xffffff,
+  BORDER_WIDTH: 2,
+  LABEL_SIZE: 12,
+};
+
+export const SPEED_BOOST = {
+  MULTIPLIER: 1.4,
+  DURATION_MS: 2500,
+  RAMP_UP_MS: 200,
+  RAMP_DOWN_MS: 500,
+  SPRITE_W: 38,
+  SPRITE_H: 38,
+  TINT: 0xffaa00,
+  AURA_TINT: 0xffaa00,
+  AURA_ALPHA: 0.75,
+};
+
+export const FALLING_DEBRIS = {
+  TELEGRAPH_DURATION_MS: 700,
+  DROP_HEIGHT_PX: 280,
+  GRAVITY_Y: 2400,
+  SHADOW_COLOR: 0x000000,
+  SHADOW_ALPHA: 0.45,
+  SHADOW_W: 56,
+  SHADOW_H: 14,
+  DEBRIS_W: 44,
+  DEBRIS_H: 44,
+  DEBRIS_COLOR: 0x6b4a32,
+  DEBRIS_EDGE_COLOR: 0x2a1810,
+  POST_IMPACT_LIFETIME_MS: 900,
+  HITBOX_W: 38,
+  HITBOX_H: 38,
+};
+
+export const PATH_FORK = {
+  TRIGGER_AFTER_BRIDGE_BUFFER_M: 20,
+  ACTIVE_DURATION_MS: 5000,
+  COUNTDOWN_MS: 2000,
+  INPUT_WINDOW_PX: 80,
+  MARKER_W: 96,
+  MARKER_H: 130,
+  POLE_COLOR: 0x6b5a4a,
+  ARROW_COLOR_LEFT: 0x4dd0ff,
+  ARROW_COLOR_RIGHT: 0xffaa00,
+  COMMITTED_TINT_LEFT: 0x4dd0ff,
+  COMMITTED_TINT_RIGHT: 0xffaa00,
+  HUD_Y_FROM_TOP: 140,
+  HUD_W: 200,
+  HUD_H: 28,
+  HUD_BG_COLOR: 0x1a1625,
+  HUD_BG_ALPHA: 0.75,
+  COUNTDOWN_RADIUS: 28,
+  COUNTDOWN_Y_FROM_TOP: 200,
+  COUNTDOWN_BG_COLOR: 0x1a1625,
+  COUNTDOWN_RING_COLOR: 0xffd700,
+  KNOWLEDGE_LABEL_AR: 'العلم',
+  SPEED_LABEL_AR: 'السرعة',
+  KNOWLEDGE_NOOR_MSG: 'أمامك طريقان... طريق العلم يقدّم مكافآت أكبر... اختر بحكمة',
+  SPEED_BONUS_SCORE: 10,
+  KNOWLEDGE_BONUS_SCORE: 25,
+  KNOWLEDGE_EXTRA_STAR_COUNT: 4,
+  UPPER_LANE_Y_OFFSET: 100,
+  LANE_TILE_WIDTH: 64,
+  LANE_TILE_HEIGHT: 14,
+  LANE_TILE_COLOR: 0x4dd0ff,
+  LANE_TILE_EDGE_COLOR: 0x1a3550,
+  PLAYER_LANE_TWEEN_MS: 350,
+  COUNTDOWN_SLOWMO_SCALE: 0.45,
+  HINT_FONT_SIZE: 20,
+  HINT_Y_FROM_TOP: 260,
+  HINT_GAP_PX: 100,
+};
+
+export const KNOWLEDGE_FRAGMENT = {
+  SPRITE_W: 32,
+  SPRITE_H: 36,
+  COLLECT_SCORE: 20,
+  BOOK_COLOR: 0x4dd0ff,
+  GLOW_COLOR: 0xffd700,
+};
+
+export const BRIDGE_COLLAPSE = {
+  TRIGGER_DISTANCE_IN_CITY_M: 380,
+  PHASE_LENGTH_M: 60,
+  PRELUDE_MS: 2500,
+  TILE_WIDTH: 64,
+  TILE_HEIGHT: 18,
+  TILE_COLOR: 0x6b5a4a,
+  TILE_EDGE_COLOR: 0x2a2018,
+  TILE_HIGHLIGHT_COLOR: 0x8a7a6a,
+  CRACK_COLOR: 0xff4d4d,
+  CRACK_TELEGRAPH_MS: 1200,
+  CRACK_SPREAD_STAGGER_MS: 80,
+  COLLAPSE_DURATION_MS: 800,
+  COLLAPSE_STAGGER_MS: 50,
+  EARLY_COLLAPSE_INTERVAL_MS: 2400,
+  MID_COLLAPSE_INTERVAL_MS: 2100,
+  LATE_COLLAPSE_INTERVAL_MS: 1800,
+  EARLY_PHASE_END_RATIO: 0.33,
+  MID_PHASE_END_RATIO: 0.66,
+  SECTION_SIZE_EARLY: 1,
+  SECTION_SIZE_MID: 1,
+  SECTION_SIZE_LATE: 1,
+  ENTRY_SHAKE_MS: 300,
+  ENTRY_SHAKE_INTENSITY: 0.012,
+  ENTRY_HITSTOP_MS: 200,
+  ENTRY_HITSTOP_SCALE: 0.4,
+  FALL_FAIL_SHAKE_MS: 350,
+  FALL_FAIL_SHAKE_INTENSITY: 0.02,
+  SURVIVAL_BONUS_SCORE: 50,
+  REWARD_STAR_COUNT: 4,
+  CHECKPOINT_INTERVAL_M: 25,
+  CHECKPOINT_FLAG_COLOR: 0x4ade80,
+  AMBIENT_DEBRIS_EMIT_MS_EARLY: 220,
+  AMBIENT_DEBRIS_EMIT_MS_LATE: 60,
+  AMBIENT_DEBRIS_SPEED_MIN: 80,
+  AMBIENT_DEBRIS_SPEED_MAX: 220,
+  AMBIENT_DEBRIS_LIFESPAN_MS: 1400,
+};
+
+export const BRIDGE_WIND = {
+  TRIGGER_DISTANCE_IN_CITY_M: 380,
+  SEGMENT_LENGTH_M: 90,
+  WIND_FORCE_X: -200,
+  PLAYER_COUNTER_FORCE: 260,
+  X_DRIFT_MAX: 100,
+  BANNER_SPAWN_INTERVAL_MS: 350,
+  BANNER_FLAG_COLOR: 0xc9302c,
+  DUST_PARTICLE_EMIT_MS: 30,
+  DUST_PARTICLE_LIFESPAN_MS: 950,
+  DUST_PARTICLE_SPEED_X_MIN: -780,
+  DUST_PARTICLE_SPEED_X_MAX: -520,
+  TINT_COLOR: 0x14233a,
+  TINT_ALPHA: 0.30,
+  OVERLAY_COLOR: 0x6b5a4a,
+  OVERLAY_ALPHA: 1.0,
+  OVERLAY_HEIGHT: 58,
+  RAIL_HEIGHT: 12,
+  RAIL_POST_INTERVAL_PX: 80,
+  VOID_TOP_COLOR: 0x0a0d18,
+  VOID_BOTTOM_COLOR: 0x000000,
+  VOID_TOP_ALPHA: 0.95,
+  VOID_BOTTOM_ALPHA: 1.0,
+  ENTRY_PILLAR_HEIGHT: 160,
+  ENTRY_PILLAR_WIDTH: 28,
+  ENTRY_SHAKE_MS: 300,
+  ENTRY_SHAKE_INTENSITY: 0.014,
+  ENTRY_HITSTOP_MS: 260,
+  ENTRY_HITSTOP_SCALE: 0.35,
+  ESCALATION_FACTOR: 0.55,
+  FALL_EDGE_TIME_MS: 600,
+  SURVIVAL_BONUS_SCORE: 50,
+  GUST_COUNT: 3,
+  GUST_FORCE_MULTIPLIER: 1.6,
+  GUST_DURATION_MS: 450,
+  GUST_SHAKE_INTENSITY: 0.010,
+  CENTER_STAR_INTERVAL_MS: 1100,
+  TILT_FACTOR: 700,
+  TILT_MAX: 0.32,
+};
+
+export const BALANCE_METER = {
+  WIDTH: 220,
+  HEIGHT: 14,
+  Y_FROM_BOTTOM: 90,
+  BG_COLOR: 0x1a1625,
+  BG_ALPHA: 0.7,
+  EDGE_COLOR: 0xff4d4d,
+  WARN_COLOR: 0xffaa00,
+  CENTER_COLOR: 0x4ade80,
+  INDICATOR_COLOR: 0xffffff,
+  BORDER_COLOR: 0xffffff,
+  BORDER_ALPHA: 0.85,
+  INDICATOR_W: 6,
+  INDICATOR_H: 22,
+  WARN_THRESHOLD: 0.6,
+  EDGE_THRESHOLD: 0.85,
+};
+
 export const INTRO_SAFE_DISTANCE_M = 22;
 
 export const UI_STRINGS = {
@@ -48,12 +343,34 @@ export const UI_STRINGS = {
   JUMP_INSTRUCTION: "Click or Tap to Jump",
 };
 
-/** Step 2 – Progress system: distance in meters, ~4.5–5 m/s at base speed */
 export const PROGRESS = {
-  /** Stage 1 length in meters (~90–100 s at ~4.8 m/s) */
   STAGE_1_LENGTH_M: 450,
-  /** Stage 2 length in meters (progress bar cap; longer city before library) */
   STAGE_2_LENGTH_M: 600,
-  /** Converts world movement to displayed meters (~4.8 m/s at RUN_SPEED 350) */
+  STAGE_3_LENGTH_M: 5000, // M3B: Observatory run length before the finale. TEMP placeholder (long run to explore the new world) — final value pending Yahia's Stage 3 design doc.
   DISTANCE_SCALE: 0.0137,
+};
+
+// M2: Question = encounter OPENER (not progression gate).
+// Correct = encounter opens + bigger reward. Wrong = light slowdown penalty + encounter passes (no reward, no damage).
+export const QUESTION_ENCOUNTER = {
+  // Wrong answer: light penalty + encounter dismissed
+  WRONG_SLOWDOWN_MULTIPLIER: 0.55,
+  WRONG_SLOWDOWN_DURATION_MS: 1200,
+  WRONG_RECOVERY_DURATION_MS: 700,
+  WRONG_FEEDBACK_HOLD_MS: 900, // hold popup briefly so player sees red feedback
+
+  // Wrong: visual fizzle on encounter object (chest/gate)
+  WRONG_DIM_TINT: 0x555555,
+  WRONG_DIM_ALPHA: 0.4,
+  WRONG_DIM_DURATION_MS: 400,
+
+  // Correct answer: bigger reward (was 5-20, now wider + bonus star arc)
+  CORRECT_REWARD_MIN: 15,
+  CORRECT_REWARD_MAX: 35,
+  CORRECT_BONUS_STAR_COUNT: 4,
+  CORRECT_BONUS_STAR_GAP_PX: 56,
+  CORRECT_BONUS_STAR_ARC_PEAK: 80,
+
+  // Post-answer encounter cleanup window (existing behavior, exposed for tuning)
+  POST_ANSWER_RESUME_DELAY_MS: 600,
 };

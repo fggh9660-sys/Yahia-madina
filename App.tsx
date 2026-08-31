@@ -10,6 +10,8 @@ import { AgeSelectionUI } from './components/AgeSelectionUI';
 import { GameState, AgeGroup } from './types';
 import { MainScene } from './game/scenes/MainScene';
 import { HomeScene } from './game/scenes/HomeScene';
+import { PlayerColorPicker } from './components/PlayerColorPicker';
+import { Player } from './game/objects/Player';
 
 type GameStatus = 'intro_gate' | 'home' | 'how_to_play' | 'age_select' | 'game_details' | 'loading_play' | 'playing';
 
@@ -23,6 +25,51 @@ function App() {
   
   // Game Flow: intro_gate -> home -> how_to_play -> age_select -> game_details -> playing
   const [gameStatus, setGameStatus] = useState<GameStatus>('intro_gate');
+
+  // M3A-R1: color picker now appears as an in-game Noor discovery moment (driven by
+  // gameState.activeColorChoice) instead of a pre-gameplay setup screen, per Yahia 2026-06-02.
+  // showColorPickerInPause is the optional re-pick affordance from the pause menu.
+  const [showColorPickerInPause, setShowColorPickerInPause] = useState<boolean>(false);
+
+  const handleColorPicked = () => {
+    setShowColorPickerInPause(false);
+    // Regenerate player texture so the scarf color updates immediately.
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene | undefined;
+      if (scene) Player.regenerateTexture(scene);
+    }
+  };
+
+  // M3A-R1: confirm handler for the in-game Noor color-discovery moment — regenerate the scarf
+  // texture live, then tell the scene to clear the flag and resume the run.
+  const handleColorDiscoveryPick = () => {
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene | undefined;
+      if (scene) {
+        Player.regenerateTexture(scene);
+        scene.confirmColorChoice?.();
+      }
+    }
+  };
+
+  // iOS Safari workaround: after orientationchange the viewport sometimes settles only
+  // a few hundred ms later, leaving Phaser with a stale canvas size. Force a refresh.
+  useEffect(() => {
+    const handleOrientation = () => {
+      const refresh = () => {
+        try {
+          gameRef.current?.scale?.refresh();
+        } catch {
+          // ignore
+        }
+      };
+      // iOS reports orientation before viewport finishes resizing — refresh twice.
+      setTimeout(refresh, 100);
+      setTimeout(refresh, 400);
+    };
+    window.addEventListener('orientationchange', handleOrientation);
+    return () => window.removeEventListener('orientationchange', handleOrientation);
+  }, []);
   
   const [gameState, setGameState] = useState<GameState>({
     distance: 0,
@@ -76,7 +123,13 @@ function App() {
         soundEnabled: d.soundEnabled !== undefined ? (d.soundEnabled as boolean) : prev.soundEnabled,
         musicEnabled: d.musicEnabled !== undefined ? (d.musicEnabled as boolean) : prev.musicEnabled,
         activePuzzle: 'activePuzzle' in d ? (d.activePuzzle as GameState['activePuzzle']) : prev.activePuzzle,
-        isPaused: 'isPaused' in d ? (d.isPaused as boolean) : prev.isPaused
+        isPaused: 'isPaused' in d ? (d.isPaused as boolean) : prev.isPaused,
+        activeFragmentLore: 'activeFragmentLore' in d ? (d.activeFragmentLore as GameState['activeFragmentLore']) : prev.activeFragmentLore,
+        activeMiniChallenge: 'activeMiniChallenge' in d ? (d.activeMiniChallenge as GameState['activeMiniChallenge']) : prev.activeMiniChallenge,
+        collection: 'collection' in d ? (d.collection as GameState['collection']) : prev.collection,
+        activeColorChoice: 'activeColorChoice' in d ? (d.activeColorChoice as boolean) : prev.activeColorChoice,
+        activeLostBookPage: 'activeLostBookPage' in d ? (d.activeLostBookPage as GameState['activeLostBookPage']) : prev.activeLostBookPage,
+        m4: 'm4' in d ? (d.m4 as GameState['m4']) : prev.m4
       }));
     });
 
@@ -194,6 +247,41 @@ function App() {
     }
     return () => {
       try { delete (globalThis as any).__kr_bgm; } catch (_) { /* ignore */ }
+    };
+  }, []);
+
+  // Robust audio unlock: browsers (and a dev HMR remount) leave the WebAudio context suspended and block
+  // HTMLAudio.play() until a user gesture. The intro-gate tap handles the normal flow, but if the first
+  // interaction happens elsewhere (or after a hot-reload) audio stays silent. This one-shot listener on the
+  // FIRST interaction anywhere resumes Phaser's context and "primes" the BGM elements so later play() works.
+  useEffect(() => {
+    let done = false;
+    const unlock = () => {
+      if (done) return;
+      done = true;
+      try {
+        const ctx = (gameRef.current as any)?.sound?.context as AudioContext | undefined;
+        if (ctx && ctx.state === 'suspended') void ctx.resume();
+      } catch (_) { /* ignore */ }
+      [bgmAudioRef, stage2BgmAudioRef, menuBgmAudioRef].forEach((ref) => {
+        const a = ref.current;
+        if (!a) return;
+        const wasMuted = a.muted;
+        a.muted = true;
+        a.play().then(() => { a.pause(); try { a.currentTime = 0; } catch (_) { /* ignore */ } a.muted = wasMuted; })
+          .catch(() => { a.muted = wasMuted; });
+      });
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('touchstart', unlock);
+    window.addEventListener('keydown', unlock);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('keydown', unlock);
     };
   }, []);
 
@@ -437,6 +525,49 @@ function App() {
     }
   };
 
+  // M2-R1: dismiss the knowledge fragment lore modal and resume gameplay.
+  const handleFragmentLoreDismiss = () => {
+    playUIButton();
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
+      scene?.dismissFragmentLore?.();
+    }
+  };
+
+  // M4: KNOWLEDGE beat — "add to book": restore the page and resume gameplay.
+  const handleLostBookPageComplete = () => {
+    playUIButton();
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
+      scene?.completeLostBookPage?.();
+    }
+  };
+
+  // M4-R1: CURIOSITY beat — "let's search": close the card, keep the question open, resume gameplay.
+  const handleLostBookPageContinue = () => {
+    playUIButton();
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
+      scene?.dismissLostBookPage?.();
+    }
+  };
+
+  // M3A: Book of Noor open/close — pause/resume gameplay so player can read safely.
+  const handleBookOfNoorOpen = () => {
+    playUIButton();
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
+      scene?.pauseForBookOfNoor?.();
+    }
+  };
+  const handleBookOfNoorClose = () => {
+    playUIButton();
+    if (gameRef.current) {
+      const scene = gameRef.current.scene.getScene('MainScene') as MainScene;
+      scene?.resumeFromBookOfNoor?.();
+    }
+  };
+
   const handleResumeClick = () => {
     playUIButton();
     if (gameRef.current) {
@@ -487,9 +618,9 @@ function App() {
   }, [gameState.isGameOver]);
 
   return (
-    <div className="relative w-full h-screen bg-[#1a1625] overflow-hidden select-none touch-none">
-       {/* Game Container */}
-      <div id="game-container" className="absolute inset-0 z-0" />
+    <div className="relative w-full h-screen bg-[#1a1625] overflow-hidden select-none">
+       {/* Game Container — touch-none here so gameplay swipes don't scroll the page, while keeping React menu buttons tappable on iOS */}
+      <div id="game-container" className="absolute inset-0 z-0 touch-none" />
       
       {/* Intro Gate: subtle tap-to-begin screen before main menu */}
       {isLoaded && gameStatus === 'intro_gate' && (
@@ -554,12 +685,26 @@ function App() {
             onResumeClick={handleResumeClick}
             onRestartStageClick={handleRestartStageClick}
             onReturnToMenuClick={handleReturnToMenuClick}
+            onChangeColorClick={() => { playUIButton(); setShowColorPickerInPause(true); }}
+            onFragmentLoreDismiss={handleFragmentLoreDismiss}
+            onBookOfNoorOpen={handleBookOfNoorOpen}
+            onBookOfNoorClose={handleBookOfNoorClose}
+            onLostBookPageComplete={handleLostBookPageComplete}
+            onLostBookPageContinue={handleLostBookPageContinue}
           />
           {gameState.stageResults && (
             <StageResultsUI
               data={gameState.stageResults}
               onContinue={handleStageResultsContinue}
             />
+          )}
+          {showColorPickerInPause && (
+            <PlayerColorPicker onPick={handleColorPicked} onClose={() => setShowColorPickerInPause(false)} />
+          )}
+          {/* M3A-R1: in-game Noor color-discovery moment — discovery picker over the paused run
+              (lighter backdrop + journey copy so Noor's story beat reads through). */}
+          {gameState.activeColorChoice && (
+            <PlayerColorPicker discovery onPick={handleColorDiscoveryPick} />
           )}
         </>
       )}
@@ -573,6 +718,7 @@ function App() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

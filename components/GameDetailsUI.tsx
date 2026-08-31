@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 interface GameDetailsUIProps {
     onNext: () => void;
 }
 
 export const GameDetailsUI: React.FC<GameDetailsUIProps> = ({ onNext }) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, []);
     
     const items = [
         {
@@ -34,8 +36,18 @@ export const GameDetailsUI: React.FC<GameDetailsUIProps> = ({ onNext }) => {
     ];
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#151120] font-['Cairo'] overflow-hidden" dir="rtl">
-            
+        <div
+            ref={scrollRef}
+            className="absolute inset-0 z-50 overflow-y-auto bg-[#151120] font-['Cairo']"
+            dir="rtl"
+            style={{
+                paddingTop: 'env(safe-area-inset-top)',
+                paddingBottom: 'env(safe-area-inset-bottom)',
+                paddingLeft: 'env(safe-area-inset-left)',
+                paddingRight: 'env(safe-area-inset-right)',
+            }}
+        >
+
             {/* Background Atmosphere */}
             <div className="fixed top-0 left-0 w-full h-full pointer-events-none">
                  <div className="absolute top-[-20%] left-[-20%] w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[120px] animate-pulse"></div>
@@ -43,33 +55,32 @@ export const GameDetailsUI: React.FC<GameDetailsUIProps> = ({ onNext }) => {
                  <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
             </div>
 
-            {/* Main Content Container */}
-            <div className="relative z-10 w-full max-w-md px-6 py-8 flex flex-col justify-center min-h-screen md:min-h-0">
-                
+            <div className="relative z-10 w-full max-w-md mx-auto px-5 py-6 md:py-10 min-h-full flex flex-col">
+
                 {/* Title Section */}
-                <div className="text-center mb-8 animate-in zoom-in duration-500">
-                    <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-[#ffd700] to-[#ff9100] drop-shadow-sm mb-3 tracking-tight">
+                <div className="text-center mb-5 md:mb-8 shrink-0 animate-in zoom-in duration-500">
+                    <h1 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-[#ffd700] to-[#ff9100] drop-shadow-sm mb-2 md:mb-3 tracking-tight">
                         مغامرة العلم
                     </h1>
-                    <p className="text-gray-400 text-sm md:text-base font-bold leading-relaxed max-w-xs mx-auto">
+                    <p className="text-gray-400 text-xs md:text-base font-bold leading-relaxed max-w-xs mx-auto">
                         اجري في شوارع المدينة القديمة واجمع المعرفة!
                     </p>
                 </div>
 
                 {/* Legend Items List */}
-                <div className="w-full space-y-4 mb-10">
+                <div className="w-full space-y-3 md:space-y-4 mb-6 md:mb-10">
                     {items.map((item, idx) => (
-                        <div 
-                            key={idx} 
-                            className={`relative ${item.bg} border ${item.border} rounded-2xl p-4 flex items-center gap-4 shadow-lg ${item.glow} animate-in slide-in-from-right-8 transition-transform hover:scale-[1.02]`}
+                        <div
+                            key={idx}
+                            className={`relative ${item.bg} border ${item.border} rounded-2xl p-3 md:p-4 flex items-center gap-3 md:gap-4 shadow-lg ${item.glow} animate-in slide-in-from-right-8 transition-transform hover:scale-[1.02]`}
                             style={{ animationDelay: `${idx * 150}ms`, animationFillMode: 'backwards' }}
                         >
-                             <div className={`w-12 h-12 rounded-full ${item.iconBg} flex items-center justify-center text-xl shrink-0 shadow-inner`}>
+                             <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full ${item.iconBg} flex items-center justify-center text-lg md:text-xl shrink-0 shadow-inner`}>
                                 {item.icon}
                             </div>
-                            
+
                             <div className="flex-1">
-                                <h3 className="text-white text-lg font-bold tracking-wide">
+                                <h3 className="text-white text-base md:text-lg font-bold tracking-wide">
                                     {item.text}
                                 </h3>
                             </div>
@@ -77,10 +88,10 @@ export const GameDetailsUI: React.FC<GameDetailsUIProps> = ({ onNext }) => {
                     ))}
                 </div>
 
-                {/* Start Button */}
-                <button 
+                <button
+                    type="button"
                     onClick={onNext}
-                    className="w-full py-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-2xl text-[#1a1625] text-xl font-black shadow-[0_4px_20px_rgba(255,165,0,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 animate-in fade-in slide-in-from-bottom-4 delay-500"
+                    className="mt-auto w-full py-3.5 md:py-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-2xl text-[#1a1625] text-lg md:text-xl font-black shadow-[0_4px_20px_rgba(255,165,0,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 animate-in fade-in slide-in-from-bottom-4 delay-500 cursor-pointer touch-manipulation"
                 >
                     ابدأ المغامرة
                 </button>

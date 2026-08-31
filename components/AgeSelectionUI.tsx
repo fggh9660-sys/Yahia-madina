@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { AgeGroup } from '../types';
 
 interface AgeSelectionUIProps {
@@ -6,6 +6,8 @@ interface AgeSelectionUIProps {
 }
 
 export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, []);
     
     const cards = [
         {
@@ -50,8 +52,18 @@ export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
     ];
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#1a1625] font-['Cairo'] overflow-y-auto overflow-x-hidden" dir="rtl">
-            
+        <div
+            ref={scrollRef}
+            className="absolute inset-0 z-50 overflow-y-auto overflow-x-hidden bg-[#1a1625] font-['Cairo']"
+            dir="rtl"
+            style={{
+                paddingTop: 'env(safe-area-inset-top)',
+                paddingBottom: 'env(safe-area-inset-bottom)',
+                paddingLeft: 'env(safe-area-inset-left)',
+                paddingRight: 'env(safe-area-inset-right)',
+            }}
+        >
+
             {/* Ambient Background Elements */}
             <div className="fixed top-0 left-0 w-full h-full pointer-events-none">
                 <div className="absolute top-[-20%] right-[-10%] w-[400px] md:w-[600px] h-[400px] md:h-[600px] bg-purple-600/10 rounded-full blur-[80px] md:blur-[120px] animate-pulse"></div>
@@ -59,17 +71,17 @@ export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
             </div>
 
-            <div className="relative z-10 w-full max-w-lg px-6 py-6 md:py-8 flex flex-col items-center min-h-screen md:min-h-0 justify-center">
-                
+            <div className="relative z-10 w-full max-w-lg mx-auto px-5 py-5 md:py-10 flex flex-col items-center min-h-full">
+
                 {/* Header */}
-                <div className="text-center mb-6 md:mb-10 animate-in fade-in slide-in-from-top-4 duration-700">
+                <div className="text-center mb-4 md:mb-10 shrink-0 animate-in fade-in slide-in-from-top-4 duration-700">
                     <div className="relative inline-block mb-1 md:mb-2">
-                         <div className="text-4xl md:text-6xl drop-shadow-[0_0_15px_rgba(255,215,0,0.5)] animate-bounce">🎯</div>
+                         <div className="text-3xl md:text-6xl drop-shadow-[0_0_15px_rgba(255,215,0,0.5)] animate-bounce">🎯</div>
                     </div>
-                    <h2 className="text-3xl md:text-5xl font-black text-white drop-shadow-md mb-2 md:mb-3">
+                    <h2 className="text-2xl md:text-5xl font-black text-white drop-shadow-md mb-1 md:mb-3">
                         <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ffd700] to-[#ff9100]">اختر فئتك العمرية</span>
                     </h2>
-                    <p className="text-white/60 text-sm md:text-lg font-bold tracking-wide">
+                    <p className="text-white/60 text-xs md:text-lg font-bold tracking-wide">
                         لنختار مغامرة تناسبك ✨
                     </p>
                 </div>
@@ -79,8 +91,9 @@ export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
                     {cards.map((card) => (
                         <button
                             key={card.id}
+                            type="button"
                             onClick={() => onSelect(card.id as any)}
-                            className={`group relative w-full text-right transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] outline-none`}
+                            className={`group relative w-full text-right transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] outline-none cursor-pointer touch-manipulation`}
                         >
                             <div className={`relative overflow-hidden rounded-2xl md:rounded-3xl border-2 ${card.border} bg-gradient-to-br ${card.bgGradient} p-1 transition-all duration-300 ${card.shadow}`}>
                                 
