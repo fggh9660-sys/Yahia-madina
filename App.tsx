@@ -7,6 +7,8 @@ import { HomeUI } from './components/HomeUI';
 import { HowToPlayUI } from './components/HowToPlayUI';
 import { GameDetailsUI } from './components/GameDetailsUI';
 import { AgeSelectionUI } from './components/AgeSelectionUI';
+import { LanguageSwitcher } from './components/LanguageSwitcher';
+import { useLanguage } from './i18n/useLanguage';
 import { GameState, AgeGroup } from './types';
 import { MainScene } from './game/scenes/MainScene';
 import { HomeScene } from './game/scenes/HomeScene';
@@ -14,6 +16,7 @@ import { HomeScene } from './game/scenes/HomeScene';
 type GameStatus = 'intro_gate' | 'home' | 'how_to_play' | 'age_select' | 'game_details' | 'loading_play' | 'playing';
 
 function App() {
+  const { t } = useLanguage();
   const gameRef = useRef<Phaser.Game | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const uiButtonAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -72,7 +75,7 @@ function App() {
         climbProgress: d.climbProgress !== undefined ? (d.climbProgress as number) : prev.climbProgress,
         stageProgressPercent: d.stageProgressPercent !== undefined ? (d.stageProgressPercent as number) : prev.stageProgressPercent,
         currentStage: d.currentStage !== undefined ? (d.currentStage as number) : prev.currentStage,
-        stageTitle: 'stageTitle' in d ? (d.stageTitle as string | null) : prev.stageTitle,
+        stageTitle: 'stageTitle' in d ? (d.stageTitle as GameState['stageTitle']) : prev.stageTitle,
         soundEnabled: d.soundEnabled !== undefined ? (d.soundEnabled as boolean) : prev.soundEnabled,
         musicEnabled: d.musicEnabled !== undefined ? (d.musicEnabled as boolean) : prev.musicEnabled,
         activePuzzle: 'activePuzzle' in d ? (d.activePuzzle as GameState['activePuzzle']) : prev.activePuzzle,
@@ -494,16 +497,17 @@ function App() {
       {/* Intro Gate: subtle tap-to-begin screen before main menu */}
       {isLoaded && gameStatus === 'intro_gate' && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#1a1625] z-20">
+          <LanguageSwitcher className="absolute top-4 end-4" onChange={playUIButton} />
           <div className="flex flex-col items-center gap-6 px-4 text-center">
             <div className="text-yellow-300 text-2xl md:text-3xl font-bold tracking-wide">
-              اضغط لبدء المغامرة
+              {t('app.tapToBegin')}
             </div>
             <button
               type="button"
               onClick={handleIntroGateClick}
               className="px-10 py-3 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-lg shadow-lg shadow-amber-500/40 transition transform hover:-translate-y-0.5"
             >
-              ابدأ المغامرة
+              {t('app.startAdventure')}
             </button>
           </div>
         </div>
@@ -511,7 +515,7 @@ function App() {
       
       {/* 1. Home Screen UI */}
       {isLoaded && gameStatus === 'home' && (
-          <HomeUI onStart={handleStartGameClick} />
+          <HomeUI onStart={handleStartGameClick} onLanguageChange={playUIButton} />
       )}
       
       {/* 2. How To Play */}
@@ -534,7 +538,7 @@ function App() {
         <div className="absolute inset-0 flex items-center justify-center bg-[#1a1625] z-50">
           <div className="flex flex-col items-center">
             <div className="w-12 h-12 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mb-4" />
-            <div className="text-amber-400 font-bold text-xl tracking-widest">جاري تحضير مغامرتك</div>
+            <div className="text-amber-400 font-bold text-xl tracking-widest">{t('app.preparingAdventure')}</div>
           </div>
         </div>
       )}
@@ -554,6 +558,7 @@ function App() {
             onResumeClick={handleResumeClick}
             onRestartStageClick={handleRestartStageClick}
             onReturnToMenuClick={handleReturnToMenuClick}
+            onLanguageChange={playUIButton}
           />
           {gameState.stageResults && (
             <StageResultsUI
@@ -569,7 +574,7 @@ function App() {
         <div className="absolute inset-0 flex items-center justify-center bg-[#1a1625] z-50">
           <div className="flex flex-col items-center">
             <div className="w-12 h-12 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <div className="text-yellow-400 font-bold text-xl tracking-widest">جاري تحميل العالم</div>
+            <div className="text-yellow-400 font-bold text-xl tracking-widest">{t('app.loadingWorld')}</div>
           </div>
         </div>
       )}

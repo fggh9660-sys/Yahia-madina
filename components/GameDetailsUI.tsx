@@ -1,14 +1,16 @@
 import React from 'react';
+import { useLanguage } from '../i18n/useLanguage';
 
 interface GameDetailsUIProps {
     onNext: () => void;
 }
 
 export const GameDetailsUI: React.FC<GameDetailsUIProps> = ({ onNext }) => {
-    
+    const { t, dir } = useLanguage();
+
     const items = [
         {
-            text: "اجمع النجوم +10",
+            text: t('details.stars'),
             icon: "⭐",
             bg: "bg-[#1e1b2e]",
             border: "border-yellow-500/30",
@@ -16,7 +18,7 @@ export const GameDetailsUI: React.FC<GameDetailsUIProps> = ({ onNext }) => {
             glow: "shadow-yellow-500/10"
         },
         {
-            text: "افتح البوابات السحرية",
+            text: t('details.gates'),
             icon: "🚪", 
             bg: "bg-[#1e1b2e]",
             border: "border-purple-500/30",
@@ -24,7 +26,7 @@ export const GameDetailsUI: React.FC<GameDetailsUIProps> = ({ onNext }) => {
             glow: "shadow-purple-500/10"
         },
         {
-            text: "احذر من العقبات!",
+            text: t('details.obstacles'),
             icon: "⚠️",
             bg: "bg-[#1e1b2e]",
             border: "border-red-500/30",
@@ -34,7 +36,7 @@ export const GameDetailsUI: React.FC<GameDetailsUIProps> = ({ onNext }) => {
     ];
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#151120] font-['Cairo'] overflow-hidden" dir="rtl">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#151120] font-['Cairo'] overflow-hidden" dir={dir}>
             
             {/* Background Atmosphere */}
             <div className="fixed top-0 left-0 w-full h-full pointer-events-none">
@@ -49,10 +51,10 @@ export const GameDetailsUI: React.FC<GameDetailsUIProps> = ({ onNext }) => {
                 {/* Title Section */}
                 <div className="text-center mb-8 animate-in zoom-in duration-500">
                     <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-[#ffd700] to-[#ff9100] drop-shadow-sm mb-3 tracking-tight">
-                        مغامرة العلم
+                        {t('details.title')}
                     </h1>
                     <p className="text-gray-400 text-sm md:text-base font-bold leading-relaxed max-w-xs mx-auto">
-                        اجري في شوارع المدينة القديمة واجمع المعرفة!
+                        {t('details.subtitle')}
                     </p>
                 </div>
 
@@ -82,7 +84,7 @@ export const GameDetailsUI: React.FC<GameDetailsUIProps> = ({ onNext }) => {
                     onClick={onNext}
                     className="w-full py-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-2xl text-[#1a1625] text-xl font-black shadow-[0_4px_20px_rgba(255,165,0,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 animate-in fade-in slide-in-from-bottom-4 delay-500"
                 >
-                    ابدأ المغامرة
+                    {t('app.startAdventure')}
                 </button>
 
             </div>

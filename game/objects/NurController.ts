@@ -280,6 +280,11 @@ export class NurController {
     });
   }
 
+  /** Replace the text of the message currently shown under Nur (e.g. after a language switch). */
+  public updateMessage(message: string) {
+    if (this.messageText) this.messageText.setText(message);
+  }
+
   /**
    * Resize hook – keep Nur centered correctly on viewport changes.
    */

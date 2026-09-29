@@ -1,8 +1,12 @@
+import type { Localized, TranslationKey } from './i18n';
 
 export type AgeGroup = '5-7' | '8-10' | '11-13';
 
+// Text coming from the game is passed as translation keys and resolved by the React UI,
+// so switching language re-translates whatever is currently on screen.
+
 export interface NoorMessage {
-    text: string;
+    textKey: TranslationKey;
     duration?: number; // ms, default 3000
     isSoftPause?: boolean; // If true, requires tap to dismiss/resume
 }
@@ -12,7 +16,7 @@ export type PuzzleType = 'STORM' | 'LIBRARY' | 'DUAL_PATH' | 'CARPET_GATE' | 'BR
 
 export interface ActivePuzzle {
   type: PuzzleType;
-  prompt: string;
+  promptKey: TranslationKey;
   options: string[];
   correctIndex: number;
   /** Auto-timeout duration in ms (5–10 seconds). */
@@ -21,7 +25,7 @@ export interface ActivePuzzle {
 
 /** Shown after desert end or library event */
 export interface StageResultsData {
-  stageName: string;
+  stageNameKey: TranslationKey;
   distance: number;
   stars: number;
   correctAnswers: number;
@@ -48,8 +52,8 @@ export interface GameState {
   stageProgressPercent?: number;
   /** Current stage (1 = desert, 2 = city) */
   currentStage?: number;
-  /** Stage title overlay (Arabic); show 2–3 s then fade out */
-  stageTitle?: string | null;
+  /** Stage title overlay; show 2–3 s then fade out */
+  stageTitle?: TranslationKey | null;
   /** When true, game has ended (e.g. after Bayt Al-Hikma); React should show home. */
   returnToMenu?: boolean;
   /** Step 5 – Audio: SFX on/off (persisted in localStorage). */
@@ -64,8 +68,8 @@ export interface GameState {
 
 export interface Question {
   id: string;
-  text: string;
-  options: string[];
+  text: Localized<string>;
+  options: Localized<string[]>;
   correctIndex: number;
   category?: 'math' | 'logic' | 'trivia' | 'science' | 'history' | 'geography' | 'language';
 }

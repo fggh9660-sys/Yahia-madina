@@ -46,7 +46,7 @@ export class RewardBox extends Phaser.Physics.Arcade.Sprite {
     if (scene.showPuzzle) {
       scene.showPuzzle({
         type: 'BRIDGE_BOX',
-        prompt: 'ما الذي يرمز إلى المكافأة؟',
+        promptKey: 'puzzle.rewardBox',
         options: ['⭐', '📦', '🗝️'],
         correctIndex: 1,
         timeoutMs: 8000,

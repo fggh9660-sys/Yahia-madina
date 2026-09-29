@@ -1,44 +1,47 @@
 import React from 'react';
+import type { TranslationKey } from '../i18n';
+import { useLanguage } from '../i18n/useLanguage';
 
 interface HowToPlayUIProps {
     onNext: () => void;
 }
 
+const steps: { titleKey: TranslationKey; descKey: TranslationKey; icon: string; gradient: string; shadow: string }[] = [
+    {
+        titleKey: 'howTo.run.title',
+        descKey: 'howTo.run.desc',
+        icon: "🏃",
+        gradient: "from-blue-500 to-blue-600",
+        shadow: "shadow-blue-500/20"
+    },
+    {
+        titleKey: 'howTo.stars.title',
+        descKey: 'howTo.stars.desc',
+        icon: "⭐",
+        gradient: "from-yellow-400 to-yellow-500",
+        shadow: "shadow-yellow-500/20"
+    },
+    {
+        titleKey: 'howTo.gates.title',
+        descKey: 'howTo.gates.desc',
+        icon: "🚪",
+        gradient: "from-purple-500 to-purple-600",
+        shadow: "shadow-purple-500/20"
+    },
+    {
+        titleKey: 'howTo.knowledge.title',
+        descKey: 'howTo.knowledge.desc',
+        icon: "💡",
+        gradient: "from-orange-500 to-orange-600",
+        shadow: "shadow-orange-500/20"
+    }
+];
+
 export const HowToPlayUI: React.FC<HowToPlayUIProps> = ({ onNext }) => {
-    
-    const steps = [
-        {
-            title: "اركض واقفز",
-            desc: "اضغط على الشاشة للقفز وتجاوز العقبات",
-            icon: "🏃",
-            gradient: "from-blue-500 to-blue-600",
-            shadow: "shadow-blue-500/20"
-        },
-        {
-            title: "اجمع النجوم",
-            desc: "النجوم تزيد من نقاطك",
-            icon: "⭐",
-            gradient: "from-yellow-400 to-yellow-500",
-            shadow: "shadow-yellow-500/20"
-        },
-        {
-            title: "افتح البوابات",
-            desc: "أجب على الأسئلة لتفتح البوابات السحرية",
-            icon: "🚪",
-            gradient: "from-purple-500 to-purple-600",
-            shadow: "shadow-purple-500/20"
-        },
-        {
-            title: "قوة المعرفة",
-            desc: "العلم هو مفتاحك للتقدم",
-            icon: "💡",
-            gradient: "from-orange-500 to-orange-600",
-            shadow: "shadow-orange-500/20"
-        }
-    ];
+    const { t, dir } = useLanguage();
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#151120] font-['Cairo'] overflow-hidden" dir="rtl">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#151120] font-['Cairo'] overflow-hidden" dir={dir}>
             
             {/* Background Atmosphere */}
             <div className="fixed top-0 left-0 w-full h-full pointer-events-none">
@@ -57,10 +60,10 @@ export const HowToPlayUI: React.FC<HowToPlayUIProps> = ({ onNext }) => {
                     </div>
                     
                     <h2 className="text-3xl font-black text-white mb-2 tracking-tight">
-                        كيف تلعب؟
+                        {t('howTo.title')}
                     </h2>
                     <p className="text-gray-400 text-sm font-bold">
-                        اتبع الخطوات لتصبح بطلاً
+                        {t('howTo.subtitle')}
                     </p>
                 </div>
 
@@ -77,12 +80,12 @@ export const HowToPlayUI: React.FC<HowToPlayUIProps> = ({ onNext }) => {
                                     {step.icon}
                                 </div>
                                 
-                                <div className="flex-1 text-right">
+                                <div className="flex-1 text-start">
                                     <h3 className="text-white font-black text-base mb-1 group-hover:text-yellow-400 transition-colors">
-                                        {step.title}
+                                        {t(step.titleKey)}
                                     </h3>
                                     <p className="text-gray-400 text-xs font-bold leading-relaxed">
-                                        {step.desc}
+                                        {t(step.descKey)}
                                     </p>
                                 </div>
                             </div>
@@ -95,7 +98,7 @@ export const HowToPlayUI: React.FC<HowToPlayUIProps> = ({ onNext }) => {
                             onClick={onNext}
                             className="w-full py-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-2xl text-[#1a1625] text-xl font-black shadow-[0_4px_20px_rgba(255,165,0,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 delay-500 flex items-center justify-center gap-2"
                         >
-                            <span>انطلق</span>
+                            <span>{t('howTo.go')}</span>
                             <span className="text-2xl">🚀</span>
                         </button>
                     </div>

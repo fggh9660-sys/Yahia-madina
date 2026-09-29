@@ -275,7 +275,7 @@ export class EventManager {
       if (this.hasTriggeredRooftopTutorial) return;
       this.hasTriggeredRooftopTutorial = true;
 
-      this.scene.showNoorMessage('استعد… التحدي يقترب.', false, 'warning');
+      this.scene.showNoorMessage('noor.challengeAhead', false, 'warning');
   }
 
   // --- CARPET EVENT ---
@@ -303,13 +303,13 @@ export class EventManager {
       if (this.isRoadCarpet) {
           this.isRoadCarpet = false;
           this.encounterType = 'NONE';
-          this.scene.showNoorMessage("لقد فاتك البساط هذه المرة. لا بأس! 🧞‍♂️", false, 'greet');
+          this.scene.showNoorMessage('noor.roadCarpetMissed', false, 'greet');
           return;
       }
       this.carpetMissed = true;
       this.nextCarpetSpawnPos = this.scene.getRunDistance() + this.CARPET_SPAWN_DIST_M;
       this.encounterType = 'NONE';
-      this.scene.showNoorMessage("لقد فاتنا البساط! لا تقلق، سيظهر مرة أخرى.", false, 'greet');
+      this.scene.showNoorMessage('noor.carpetMissed', false, 'greet');
   }
 
   private spawnMagicCarpet() {
@@ -320,7 +320,7 @@ export class EventManager {
       this.encounterType = 'CARPET';
       this.carpetMode = 'LIBRARY';
       this.isRoadCarpet = false;
-      this.scene.showNoorMessage("انظر! بساط الريح السحري! اقفز عليه! 🧞‍♂️", false, 'greet');
+      this.scene.showNoorMessage('noor.carpetSpotted', false, 'greet');
   }
 
   /** Spawn the magic carpet visibly on the city road; when player reaches it, Nur invites then ride. At least once guaranteed; then additional spawns with probability. */
@@ -342,7 +342,7 @@ export class EventManager {
           this.encounterType = 'CARPET';
           this.carpetMode = 'CITY_SIDE';
           this.isRoadCarpet = true;
-          this.scene.showNoorMessage("انظر! بساط سحري على الطريق… اقترب منه! 🧞‍♂️", false, 'greet');
+          this.scene.showNoorMessage('noor.roadCarpetSpotted', false, 'greet');
       };
 
       if (!this.hasSpawnedRoadCarpet && distInCity >= this.ROAD_CARPET_SPAWN_DIST_M) {
@@ -365,7 +365,7 @@ export class EventManager {
       if (this.roadCarpetIntroPending || !this.currentCarpet || !this.isRoadCarpet) return;
       this.roadCarpetIntroPending = true;
       this.scene.setGameSpeed(0);
-      this.scene.showNoorMessage("لنجرب البساط السحري! ✨", false, 'greet');
+      this.scene.showNoorMessage('noor.tryCarpet', false, 'greet');
       this.scene.audioManager?.playNurVoice('greet');
       this.scene.time.delayedCall(2500, () => {
           this.roadCarpetIntroPending = false;
@@ -427,7 +427,7 @@ export class EventManager {
       this.carpetGatePending = true;
       this.scene.showPuzzle({
           type: 'CARPET_GATE',
-          prompt: 'بوابة البساط السحري\n\nقبل أن تركب البساط السحري، عليك أن تثبت حكمتك.\n\nاختر الرمز الذي يمثّل المعرفة لتبدأ الرحلة.',
+          promptKey: 'puzzle.carpetGate',
           options: ['📚', '⚔️', '🏹'],
           correctIndex: 0,
           timeoutMs: 8000
@@ -437,7 +437,7 @@ export class EventManager {
   /** Called when player overlaps the carpet gate (before puzzle). */
   public onCarpetGateOverlap(): void {
       if (!this.currentCarpetGate?.active || this.carpetGatePending) return;
-      this.scene.showNoorMessage('قبل أن تركب البساط السحري، عليك أن تثبت حكمتك.', false, 'greet');
+      this.scene.showNoorMessage('noor.carpetGate', false, 'greet');
       this.onCarpetOverlap();
   }
 
@@ -464,7 +464,7 @@ export class EventManager {
           }
           this.encounterType = 'NONE';
           this.isEncounterActive = false;
-          this.scene.showNoorMessage("نكمل طريقنا إلى بيت الحكمة. 🏛️", false, 'greet');
+          this.scene.showNoorMessage('noor.onToHouseOfWisdom', false, 'greet');
       }
   }
 
@@ -489,7 +489,7 @@ export class EventManager {
       // HIDE GROUND LAYERS
       this.scene.environmentManager.background.setFlightMode(true);
       
-      this.scene.showNoorMessage("تمسك جيداً! لنحلق فوق الغيوم! ✨", false, 'greet');
+      this.scene.showNoorMessage('noor.holdOn', false, 'greet');
       
       if (this.currentCarpet) {
           this.currentCarpet.destroy();
@@ -589,7 +589,7 @@ export class EventManager {
 
   private activateLevelGate() {
       if (this.currentGate && this.currentGate.active) {
-          this.scene.showNoorMessage("هذه بوابة الانتقال... ستقودنا إلى المدينة.", false, 'greet');
+          this.scene.showNoorMessage('noor.levelGate', false, 'greet');
           this.scene.time.delayedCall(2000, () => {
               this.scene.hideNoorMessage();
               if (this.currentGate) this.currentGate.open();
@@ -671,8 +671,8 @@ export class EventManager {
           this.scene.recordCityStageStart();
           this.scene.audioManager?.resumeBGM();
           // Step 2: show stage title first (2.5 s), then Noor message
-          this.scene.showStageTitle('المرحلة 2 – مدخل المدينة', 2500, () => {
-              this.scene.showNoorMessage("مرحبًا بك في مدينة العلم…\nقد لا تكون الرحلة سهلة،\nلكنني سأكون معك في كل خطوة.", false, 'greet');
+          this.scene.showStageTitle('stage.cityTitle', 2500, () => {
+              this.scene.showNoorMessage('noor.welcome', false, 'greet');
 
               this.scene.time.delayedCall(5000, () => {
                   this.scene.hideNoorMessage();
@@ -688,7 +688,7 @@ export class EventManager {
   }
 
   public continueLibraryTransition() {
-      this.scene.showNoorMessage("أهلاً بك في عالم المعرفة. 📚", false, 'greet');
+      this.scene.showNoorMessage('noor.welcomeKnowledge', false, 'greet');
       this.scene.time.delayedCall(3500, () => {
           this.scene.hideNoorMessage();
           this.eventPhase = 'NONE';
@@ -708,7 +708,7 @@ export class EventManager {
       const groundY = getGroundY(height);
       this.libraryBuilding = new LibraryBuilding(this.scene, width + 400, groundY);
       this.scene.add.existing(this.libraryBuilding);
-      this.scene.showNoorMessage("انظر! بيت الحكمة! 🏛️", false, 'greet');
+      this.scene.showNoorMessage('noor.houseSpotted', false, 'greet');
       return true;
   }
 
@@ -756,14 +756,14 @@ export class EventManager {
                   this.scene.player.isScripted = false;
                   this.scene.setGameSpeed(0);
                   this.scene.audioManager?.resumeBGM();
-                  this.scene.showStageTitle('بيت الحكمة', 2500, () => {
-                      this.scene.showNoorMessage('أهلاً بك في بيت الحكمة… هنا نهاية الرحلة وبداية العلم. 📚', false, 'greet');
+                  this.scene.showStageTitle('stage.houseOfWisdom', 2500, () => {
+                      this.scene.showNoorMessage('noor.houseWelcome', false, 'greet');
                       // 3–5 short puzzles in sequence (placeholder; replace with your puzzles later)
                       this.libraryPuzzleQueue = [
-                          { type: 'LIBRARY', prompt: 'أيُّ هذه الرموز يعبِّر أكثر عن بيت الحكمة؟', options: ['📚', '⚔️', '🏹'], correctIndex: 0, timeoutMs: 8000 },
-                          { type: 'LIBRARY', prompt: 'ما الذي يرمز إلى العلم؟', options: ['📖', '🗡️', '🛡️'], correctIndex: 0, timeoutMs: 8000 },
-                          { type: 'LIBRARY', prompt: 'اختر الرمز الذي يمثّل الحكمة.', options: ['🦉', '🐺', '🦅'], correctIndex: 0, timeoutMs: 8000 },
-                          { type: 'LIBRARY', prompt: 'أيُّ لون يُذكّر بالمعرفة والذهب؟', options: ['🟡', '🔴', '🔵'], correctIndex: 0, timeoutMs: 8000 }
+                          { type: 'LIBRARY', promptKey: 'puzzle.library1', options: ['📚', '⚔️', '🏹'], correctIndex: 0, timeoutMs: 8000 },
+                          { type: 'LIBRARY', promptKey: 'puzzle.library2', options: ['📖', '🗡️', '🛡️'], correctIndex: 0, timeoutMs: 8000 },
+                          { type: 'LIBRARY', promptKey: 'puzzle.library3', options: ['🦉', '🐺', '🦅'], correctIndex: 0, timeoutMs: 8000 },
+                          { type: 'LIBRARY', promptKey: 'puzzle.library4', options: ['🟡', '🔴', '🔵'], correctIndex: 0, timeoutMs: 8000 }
                       ];
                       this.libraryPuzzleIndex = 0;
                       this.libraryPuzzleSequenceActive = true;
@@ -801,7 +801,7 @@ export class EventManager {
       this.refugeTent = new BedouinTent(this.scene, width + 400, groundY);
       this.refugeTent.setDepth(15);
       this.scene.add.existing(this.refugeTent);
-      this.scene.showNoorMessage("انظر! خيمة بدوية! لنحتمي بها! ⛺", false, 'greet');
+      this.scene.showNoorMessage('noor.tentSpotted', false, 'greet');
   }
 
   private triggerSandstormArrival() {
@@ -832,14 +832,14 @@ export class EventManager {
 
   private startShelterInteraction() {
       if (this.refugeTent && this.refugeTent.active) this.refugeTent.setOccupied(true);
-      this.scene.showNoorMessage("الحمد لله! نحن في أمان هنا. 🏕️", false, 'success');
+      this.scene.showNoorMessage('noor.shelterSafe', false, 'success');
       this.scene.replenishHealth();
       // 3–5 short puzzles in sequence (placeholder content; replace with your puzzles later)
       this.stormPuzzleQueue = [
-          { type: 'STORM', prompt: 'انظر إلى النمط: ★ ☆ ★ ☆ ؟ ما الرمز التالي؟', options: ['★', '☆', '⚪️'], correctIndex: 0, timeoutMs: 7000 },
-          { type: 'STORM', prompt: 'ما الشكل الذي يكمل التسلسل؟ ◯ □ ◯ □ ؟', options: ['◯', '□', '△'], correctIndex: 0, timeoutMs: 7000 },
-          { type: 'STORM', prompt: 'اختر الرمز الذي يمثّل المعرفة.', options: ['📚', '⚔️', '🏹'], correctIndex: 0, timeoutMs: 7000 },
-          { type: 'STORM', prompt: 'أيُّ لون يُذكّر بالصحراء؟', options: ['🟡', '🔵', '🟢'], correctIndex: 0, timeoutMs: 7000 }
+          { type: 'STORM', promptKey: 'puzzle.storm1', options: ['★', '☆', '⚪️'], correctIndex: 0, timeoutMs: 7000 },
+          { type: 'STORM', promptKey: 'puzzle.storm2', options: ['◯', '□', '△'], correctIndex: 0, timeoutMs: 7000 },
+          { type: 'STORM', promptKey: 'puzzle.storm3', options: ['📚', '⚔️', '🏹'], correctIndex: 0, timeoutMs: 7000 },
+          { type: 'STORM', promptKey: 'puzzle.storm4', options: ['🟡', '🔵', '🟢'], correctIndex: 0, timeoutMs: 7000 }
       ];
       this.stormPuzzleIndex = 0;
       this.scene.time.delayedCall(1500, () => {
@@ -894,7 +894,7 @@ export class EventManager {
           this.scene.tweens.add({ targets: this.scene.player, alpha: 1, scale: 1, duration: 500 });
           this.scene.time.delayedCall(500, () => {
               // Storm over – revert to simple thankful line
-              this.scene.showNoorMessage("الحمد لله! انتهت العاصفة الرملية.", false, 'success');
+              this.scene.showNoorMessage('noor.stormOver', false, 'success');
               this.scene.time.delayedCall(4500, () => {
                   this.scene.hideNoorMessage();
                   this.resumeRunFromShelter();

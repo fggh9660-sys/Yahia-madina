@@ -43,7 +43,7 @@ export class CityCarpetBox extends Phaser.Physics.Arcade.Sprite {
     if (scene.showPuzzle) {
       scene.showPuzzle({
         type: 'CITY_CARPET_BOX',
-        prompt: 'اختر الرمز الذي يمثّل البساط السحري لتحلق فوق المدينة!',
+        promptKey: 'puzzle.cityCarpetBox',
         options: ['🧞‍♂️', '⚔️', '📚'],
         correctIndex: 0,
         timeoutMs: 8000,

@@ -5,6 +5,7 @@ import { Player } from '../objects/Player';
 import { Obstacle } from '../objects/Obstacle';
 import { Question, GameState, NoorMessage, StageResultsData, ActivePuzzle, PuzzleType } from '../../types';
 import { getQuestions } from '../data/questions';
+import { t, formatDigits, subscribeLanguage, type TranslationKey } from '../../i18n';
 
 // Objects for Texture Generation
 import { Star } from '../objects/Star';
@@ -84,7 +85,7 @@ export class MainScene extends Phaser.Scene {
   public climbProgress: number = 0;
 
   // Step 2 – Progress: stage title overlay (Arabic), cleared after 2–3 s
-  private stageTitle: string | null = null;
+  private stageTitle: TranslationKey | null = null;
 
   // Step 6 – Mini puzzles (storm / library / dual-path)
   private activePuzzle: ActivePuzzle | null = null;
@@ -139,6 +140,12 @@ export class MainScene extends Phaser.Scene {
     this.eventManager = new EventManager(this);
     this.collisionManager = new CollisionManager(this);
     this.nurController = new NurController(this);
+
+    // Re-translate the Phaser-rendered text under Nur if the language is switched mid-message.
+    const unsubscribeLanguage = subscribeLanguage(() => {
+      if (this.currentNoorMessage) this.nurController.updateMessage(t(this.currentNoorMessage.textKey));
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, unsubscribeLanguage);
 
     // 2. Generate Assets (core gameplay textures – already prewarmed in HomeScene, so this is cheap)
     Player.generateTexture(this);
@@ -251,12 +258,11 @@ export class MainScene extends Phaser.Scene {
 
   /** Prelude: Nur + welcome message, then run starts with stage title, then jump instruction from top. */
   private startNurIntro() {
-    const welcomeMessage =
-      'مرحبًا بك في مدينة العلم…\nقد لا تكون الرحلة سهلة،\nلكنني سأكون معك في كل خطوة.';
-    this.currentNoorMessage = { text: welcomeMessage };
+    const welcomeMessage: TranslationKey = 'noor.welcome';
+    this.currentNoorMessage = { textKey: welcomeMessage };
     this.nurController.show('greet', {
       position: 'center',
-      message: welcomeMessage
+      message: t(welcomeMessage)
     });
     this.syncUI();
 
@@ -282,16 +288,16 @@ export class MainScene extends Phaser.Scene {
       this.physics.resume();
       this.player.play('run');
 
-      this.stageTitle = 'المرحلة 1 – طريق الصحراء';
+      this.stageTitle = 'stage.desertTitle';
       this.syncUI();
       this.time.delayedCall(2500, () => {
         this.stageTitle = null;
         this.syncUI();
-        const jumpInstruction = 'اضغط للقفز وتجاوز العقبات!';
-        this.currentNoorMessage = { text: jumpInstruction };
+        const jumpInstruction: TranslationKey = 'noor.jumpHint';
+        this.currentNoorMessage = { textKey: jumpInstruction };
         this.nurController.show('greet', {
           position: 'top',
-          message: jumpInstruction,
+          message: t(jumpInstruction),
           animateFromTop: true
         });
         this.syncUI();
@@ -315,14 +321,14 @@ export class MainScene extends Phaser.Scene {
   public showDesertStageResults() {
     this.audioManager?.playStageSuccess();
     this.stageResults = {
-      stageName: 'نهاية الصحراء',
+      stageNameKey: 'stage.desertEnd',
       distance: this.runDistance,
       stars: this.collectedStarsCount,
       correctAnswers: this.correctAnswersCount,
       wrongAnswers: this.wrongAnswersCount,
       timeSeconds: (this.time.now - this.stageStartTime) / 1000
     };
-    this.showNoorMessage('رائع! لقد أنهيت هذه المرحلة بنجاح.', false, 'success');
+    this.showNoorMessage('noor.stageCleared', false, 'success');
     this.pendingTransition = 'DESERT_END';
     this.syncUI();
   }
@@ -332,14 +338,14 @@ export class MainScene extends Phaser.Scene {
     this.audioManager?.playStageSuccess();
     const distInCity = this.runDistance - this.cityStartDistanceForStats;
     this.stageResults = {
-      stageName: 'بيت الحكمة',
+      stageNameKey: 'stage.houseOfWisdom',
       distance: Math.max(0, distInCity),
       stars: this.collectedStarsCount,
       correctAnswers: this.correctAnswersCount,
       wrongAnswers: this.wrongAnswersCount,
       timeSeconds: (this.time.now - this.cityStageStartTime) / 1000
     };
-    this.showNoorMessage('كل خطوة تقرّبك من نورٍ جديد.', false, 'success');
+    this.showNoorMessage('noor.newLight', false, 'success');
     this.pendingTransition = 'LIBRARY_END';
     this.syncUI();
   }
@@ -579,7 +585,7 @@ export class MainScene extends Phaser.Scene {
       this.firstObstacleRef = null;
       this.eventManager.removeEncounterObjects();
       // Sandstorm warning – clearer that a sandstorm is coming
-      this.showNoorMessage('انتبه… عاصفة رملية قادمة!', false, 'warning');
+      this.showNoorMessage('noor.sandstormWarning', false, 'warning');
   }
 
   /** Clear question overlay and resume physics (e.g. when sandstorm interrupts a chest encounter). */
@@ -681,7 +687,7 @@ export class MainScene extends Phaser.Scene {
       this.player.climbUp(targetY, () => {
           this.climbProgress = 0;
           this.eventManager.eventPhase = 'RECOVERY';
-          this.showNoorMessage("أحسنت! ذلك كان وشيكاً! 😅", false, 'encourage');
+          this.showNoorMessage('noor.closeCall', false, 'encourage');
           this.time.delayedCall(1000, () => {
               this.setGameSpeed(1.0);
               this.eventManager.eventPhase = 'NONE';
@@ -765,11 +771,11 @@ export class MainScene extends Phaser.Scene {
   }
 
   /** Show Nur and the message together. Pass optional NurState for expression; defaults to 'greet'. */
-  public showNoorMessage(text: string, isSoftPause: boolean = false, nurState: NurState = 'greet') {
+  public showNoorMessage(textKey: TranslationKey, isSoftPause: boolean = false, nurState: NurState = 'greet') {
       if (this.currentNoorMessage && !isSoftPause && this.currentNoorMessage.isSoftPause) return;
       if (this.messageTimer) this.messageTimer.remove();
 
-      this.currentNoorMessage = { text, isSoftPause };
+      this.currentNoorMessage = { textKey, isSoftPause };
       if (this.nurController) {
           this.nurController.show(nurState, { position: 'top' });
       }
@@ -825,7 +831,7 @@ export class MainScene extends Phaser.Scene {
           this.correctAnswersCount++;
           this.activeQuestion = null;
           this.eventManager.isEncounterOpening = true;
-          this.showNoorMessage('أحسنت! استمر، أنت تتقدم.', false, 'encourage');
+          this.showNoorMessage('noor.keepGoing', false, 'encourage');
           this.syncUI();
 
           if (this.eventManager.encounterType === 'GATE' && this.eventManager.currentGate) {
@@ -835,14 +841,14 @@ export class MainScene extends Phaser.Scene {
               this.eventManager.currentChest.open(() => {
                   const reward = Phaser.Math.Between(5, 20);
                   this.addScore(reward);
-                  this.showFloatingText(this.player.x, this.player.y - 100, `+${reward} نجمة!`, '#ffd700');
+                  this.showFloatingText(this.player.x, this.player.y - 100, t('float.starsReward', { n: reward }), '#ffd700');
                   this.handlePostAnswerDelay(false);
               });
           }
       } else {
           this.audioManager?.playDamage();
           this.cameras.main.shake(180, 0.014);
-          this.showNoorMessage('حاول مرة أخرى.', false, 'warning');
+          this.showNoorMessage('noor.tryAgain', false, 'warning');
           this.wrongAnswersCount++;
           this.syncUI();
       }
@@ -923,27 +929,27 @@ export class MainScene extends Phaser.Scene {
               case 'STORM':
                   if (isCorrect) {
                       this.addScore(10);
-                      this.showFloatingText(this.player.x, this.player.y - 80, '+١٠ نجمة', '#ffd700');
+                      this.showFloatingText(this.player.x, this.player.y - 80, t('float.stars', { n: formatDigits(10) }), '#ffd700');
                   }
                   break;
               case 'LIBRARY':
                   if (isCorrect) {
                       this.addScore(20);
-                      this.showFloatingText(this.scale.width / 2, this.scale.height / 2 - 80, '+٢٠ نجمة', '#ffd700');
+                      this.showFloatingText(this.scale.width / 2, this.scale.height / 2 - 80, t('float.stars', { n: formatDigits(20) }), '#ffd700');
                   }
                   break;
               case 'DUAL_PATH':
                   if (isCorrect) {
                       this.addScore(15);
-                      this.showFloatingText(this.player.x, this.player.y - 80, '+١٥ نجمة', '#ffd700');
+                      this.showFloatingText(this.player.x, this.player.y - 80, t('float.stars', { n: formatDigits(15) }), '#ffd700');
                   }
                   break;
               case 'CARPET_GATE':
                   this.eventManager.finishCarpetGatePuzzle(isCorrect);
                   if (isCorrect) {
-                      this.showNoorMessage('أحسنت! 🎉', false, 'success');
+                      this.showNoorMessage('noor.wellDone', false, 'success');
                   } else {
-                      this.showNoorMessage('حاول مرة أخرى.', false, 'warning');
+                      this.showNoorMessage('noor.tryAgain', false, 'warning');
                   }
                   this.physics.resume();
                   this.player.anims.resume();
@@ -953,16 +959,16 @@ export class MainScene extends Phaser.Scene {
               case 'BRIDGE_BOX':
                   if (isCorrect) {
                       this.addScore(15);
-                      this.showFloatingText(this.player.x, this.player.y - 80, '+١٥ نجمة', '#ffd700');
+                      this.showFloatingText(this.player.x, this.player.y - 80, t('float.stars', { n: formatDigits(15) }), '#ffd700');
                   }
                   break;
           }
       }
 
       if (isCorrect) {
-          this.showNoorMessage('أحسنت! 🎉', false, 'success');
+          this.showNoorMessage('noor.wellDone', false, 'success');
       } else {
-          this.showNoorMessage('حاول مرة أخرى.', false, 'warning');
+          this.showNoorMessage('noor.tryAgain', false, 'warning');
       }
 
       this.eventManager.reportPuzzleResolved(isCorrect);
@@ -1049,7 +1055,7 @@ export class MainScene extends Phaser.Scene {
   }
 
   /** Show stage title for durationMs, then clear and call onComplete (Step 2). */
-  public showStageTitle(title: string, durationMs: number, onComplete: () => void) {
+  public showStageTitle(title: TranslationKey, durationMs: number, onComplete: () => void) {
       this.stageTitle = title;
       this.syncUI();
       this.time.delayedCall(durationMs, () => {
@@ -1071,7 +1077,7 @@ export class MainScene extends Phaser.Scene {
       goldenOverlay.setDepth(300);
       goldenOverlay.setScrollFactor(0);
 
-      const finalMessage = 'انتهت الرحلة… وبدأت حكاية جديدة نحو العلم.';
+      const finalMessage = t('ending.final');
       const wrapWidth = Math.floor(width * 0.88);
       const isNarrow = width < 400;
       const txt = this.add.text(width / 2, height / 2, finalMessage, {

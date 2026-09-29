@@ -1,6 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState } from '../types';
+import type { TranslationKey } from '../i18n';
+import { useLanguage } from '../i18n/useLanguage';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface GameUIProps {
   gameState: GameState;
@@ -14,9 +17,12 @@ interface GameUIProps {
   onResumeClick?: () => void;
   onRestartStageClick?: () => void;
   onReturnToMenuClick?: () => void;
+  onPuzzleAnswer?: (index: number) => void;
+  onLanguageChange?: () => void;
 }
 
-export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick }) => {
+export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, onMessageDismiss, onSoundToggle, onMusicToggle, onPuzzleAnswer, onPauseClick, onResumeClick, onRestartStageClick, onReturnToMenuClick, onLanguageChange }) => {
+  const { t, dir, language } = useLanguage();
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
 
@@ -27,17 +33,17 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
 
   // Noor Guide State
   const [showNoor, setShowNoor] = useState(false);
-  const [noorText, setNoorText] = useState('');
+  const [noorTextKey, setNoorTextKey] = useState<TranslationKey | null>(null);
 
   // Stage title: optional fade-out before clearing (keep title visible for fade-out)
-  const [stageTitleDisplay, setStageTitleDisplay] = useState<string | null>(null);
+  const [stageTitleDisplay, setStageTitleDisplay] = useState<TranslationKey | null>(null);
   const [stageTitleFadeOut, setStageTitleFadeOut] = useState(false);
   const stageTitleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Handle Noor Messages
   useEffect(() => {
     if (gameState.noorMessage) {
-        setNoorText(gameState.noorMessage.text);
+        setNoorTextKey(gameState.noorMessage.textKey);
         setShowNoor(true);
     } else {
         setShowNoor(false);
@@ -132,17 +138,17 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
   const isProgressComplete = progressPercent >= 100;
 
   return (
-    <div className="font-['Cairo']" dir="rtl">
+    <div className="font-['Cairo']" dir={dir}>
 
       {/* MINI PUZZLE OVERLAY (Storm / Library / Dual Path) */}
       {gameState.activePuzzle && onPuzzleAnswer && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="bg-[#1a1625]/95 border border-[#ffd700]/50 rounded-3xl px-5 py-6 w-[90%] max-w-md text-center shadow-2xl">
             <p className="text-[#ffd700] text-lg md:text-xl font-black mb-4">
-              لغز صغير ✨
+              {t('puzzle.title')}
             </p>
             <p className="text-white text-sm md:text-base leading-relaxed mb-5 whitespace-pre-line">
-              {gameState.activePuzzle.prompt}
+              {t(gameState.activePuzzle.promptKey)}
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               {gameState.activePuzzle.options.map((opt, idx) => (
@@ -160,7 +166,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
         </div>
       )}
 
-      {/* Step 2: Stage title overlay (Arabic) – fade in, then fade out when cleared */}
+      {/* Step 2: Stage title overlay – fade in, then fade out when cleared */}
       {stageTitleDisplay && (
         <div
           className={`absolute inset-0 z-40 flex items-center justify-center pointer-events-none transition-opacity duration-500 ${
@@ -168,7 +174,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
           }`}
         >
           <p className="text-[#ffd700] text-2xl md:text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] animate-in fade-in duration-500">
-            {stageTitleDisplay}
+            {t(stageTitleDisplay)}
           </p>
         </div>
       )}
@@ -179,7 +185,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
       >
           <div className="bg-[#1a1625]/92 backdrop-blur-md border border-[#ffd700]/40 px-4 py-3 rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.35)] max-w-[90%] md:max-w-md animate-in slide-in-from-top-4 duration-500">
              <p className="text-white font-bold text-sm md:text-base leading-relaxed text-center">
-                 {noorText}
+                 {noorTextKey ? t(noorTextKey) : ''}
              </p>
           </div>
       </div>
@@ -189,7 +195,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
           <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none">
               <div className="animate-in zoom-in duration-300 flex flex-col items-center">
                   <div className="text-[#ffd700] text-4xl font-black drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] animate-pulse mb-4">
-                      تسلق!
+                      {t('climb.title')}
                   </div>
                   
                   {/* Progress Bar */}
@@ -204,7 +210,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                   
                   <div className="mt-4 flex items-center gap-2 text-white/80 font-bold text-sm bg-black/40 px-4 py-2 rounded-full">
                       <span className="text-2xl animate-bounce">👆</span>
-                      <span>اضغط بسرعة!</span>
+                      <span>{t('climb.tapFast')}</span>
                   </div>
               </div>
           </div>
@@ -214,28 +220,31 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
       {gameState.isPaused && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm p-6">
           <div className="bg-[#1a1625] border-2 border-[#ffd700]/50 rounded-2xl p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-200">
-            <h3 className="text-[#ffd700] text-xl font-black text-center mb-6">إيقاف مؤقت</h3>
+            <h3 className="text-[#ffd700] text-xl font-black text-center mb-4">{t('pause.title')}</h3>
+            <div className="flex justify-center mb-6">
+              <LanguageSwitcher onChange={onLanguageChange} />
+            </div>
             <div className="flex flex-col gap-3">
               <button
                 type="button"
                 onClick={onResumeClick}
                 className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 border border-emerald-400/50 text-white font-bold transition-colors"
               >
-                متابعة اللعب
+                {t('pause.resume')}
               </button>
               <button
                 type="button"
                 onClick={onRestartStageClick}
                 className="w-full py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 border border-amber-400/50 text-white font-bold transition-colors"
               >
-                إعادة المرحلة
+                {t('pause.restart')}
               </button>
               <button
                 type="button"
                 onClick={onReturnToMenuClick}
                 className="w-full py-3 px-4 rounded-xl bg-black/60 hover:bg-black/80 border border-white/20 text-white font-bold transition-colors"
               >
-                العودة للقائمة الرئيسية
+                {t('pause.mainMenu')}
               </button>
             </div>
           </div>
@@ -249,9 +258,9 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
              onClick={handleOverlayClick}
           >
               <div className="bg-[#1a1625] border border-[#ffd700] rounded-3xl p-8 max-w-lg text-center shadow-2xl animate-in zoom-in-95 duration-300">
-                  <h3 className="text-[#ffd700] text-xl font-black mb-4">رسالة جديدة ✨</h3>
+                  <h3 className="text-[#ffd700] text-xl font-black mb-4">{t('message.title')}</h3>
                   <p className="text-white text-lg font-bold mb-6">{gameState.activeMessage}</p>
-                  <p className="text-white/40 text-xs animate-pulse">اضغط للمتابعة</p>
+                  <p className="text-white/40 text-xs animate-pulse">{t('message.tapToContinue')}</p>
               </div>
           </div>
       )}
@@ -275,7 +284,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
             {/* Stars – top left */}
             <div className="bg-black/40 backdrop-blur-md px-3.5 py-2.5 md:px-5 md:py-3 rounded-xl border border-white/10 shadow-lg">
               <div className="flex flex-col items-center leading-tight text-yellow-400">
-                <span className="text-yellow-400/60 text-[10px] md:text-xs uppercase tracking-widest font-bold">النجوم</span>
+                <span className="text-yellow-400/60 text-[10px] md:text-xs uppercase tracking-widest font-bold">{t('hud.stars')}</span>
                 <span className="text-xl md:text-2xl font-black">{gameState.stars}</span>
               </div>
             </div>
@@ -287,7 +296,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                   type="button"
                   onClick={onPauseClick}
                   className="p-1.5 md:p-2 rounded-lg bg-black/40 border border-white/10 hover:bg-black/60 hover:border-[#ffd700]/40 transition-colors pointer-events-auto"
-                  title="إيقاف مؤقت"
+                  title={t('hud.pause')}
                   aria-label="Pause"
                 >
                   <span className="text-lg md:text-xl">⏸</span>
@@ -300,7 +309,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                     type="button"
                     onClick={onSoundToggle}
                     className="p-1.5 md:p-2 rounded-lg bg-black/40 border border-white/10 hover:bg-black/60 hover:border-[#ffd700]/40 transition-colors"
-                    title={gameState.soundEnabled !== false ? 'إيقاف الصوت' : 'تشغيل الصوت'}
+                    title={gameState.soundEnabled !== false ? t('hud.soundOff') : t('hud.soundOn')}
                     aria-label={gameState.soundEnabled !== false ? 'Sound on' : 'Sound off'}
                   >
                     <span className="text-lg md:text-xl">{gameState.soundEnabled !== false ? '🔊' : '🔇'}</span>
@@ -311,7 +320,7 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                     type="button"
                     onClick={onMusicToggle}
                     className={`p-1.5 md:p-2 rounded-lg bg-black/40 border border-white/10 hover:bg-black/60 hover:border-[#ffd700]/40 transition-colors ${gameState.musicEnabled === false ? 'opacity-60' : ''}`}
-                    title={gameState.musicEnabled !== false ? 'إيقاف الموسيقى' : 'تشغيل الموسيقى'}
+                    title={gameState.musicEnabled !== false ? t('hud.musicOff') : t('hud.musicOn')}
                     aria-label={gameState.musicEnabled !== false ? 'Music on' : 'Music off'}
                   >
                     <span className="text-lg md:text-xl">🎵</span>
@@ -320,9 +329,9 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
               </div>
               <div className="bg-black/40 backdrop-blur-md px-3.5 py-2.5 md:px-5 md:py-3 rounded-xl border border-white/10 shadow-lg">
                 <div className="flex flex-col items-center leading-tight">
-                  <span className="text-white/60 text-[10px] md:text-xs uppercase tracking-widest font-bold">المسافة</span>
+                  <span className="text-white/60 text-[10px] md:text-xs uppercase tracking-widest font-bold">{t('hud.distance')}</span>
                   <span className="text-white text-xl md:text-2xl font-black font-mono tracking-tighter">
-                    {Math.floor(displayDistance)}<span className="text-sm text-white/50 mr-0.5">م</span>
+                    {Math.floor(displayDistance)}<span className="text-sm text-white/50 ms-0.5">{t('hud.meters')}</span>
                   </span>
                 </div>
               </div>
@@ -380,19 +389,19 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
           <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none px-4">
               <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-center gap-8 pointer-events-auto">
                   
-                  {/* CHARACTER PORTRAIT (First in flex row = Right side in RTL) */}
+                  {/* CHARACTER PORTRAIT (First in flex row = start side: right in RTL, left in LTR) */}
                   <div className="shrink-0 relative group animate-in zoom-in duration-500">
                         {/* The Circle */}
                         <div className="w-32 h-32 md:w-48 md:h-48 rounded-full border-4 border-[#ffd700] bg-[#1a1625] overflow-hidden shadow-[0_0_30px_rgba(255,215,0,0.3)] relative z-10 ring-4 ring-black/20">
                             <img 
                                 src="https://ucarecdn.com/64926886-4015-49f7-9ebc-f3f206cf82e0/Gemini_Generated_Image_x273efx273efx273removebgpreview.png"
-                                alt="Prince Noor"
+                                alt={t('question.princeNoor')}
                                 className="w-full h-full object-cover object-top transform scale-110 translate-y-2" 
                             />
                         </div>
                         {/* Name Badge */}
                         <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 z-20 bg-gradient-to-r from-yellow-600 to-yellow-400 text-[#1a1625] px-4 py-1 rounded-full font-bold text-sm shadow-lg whitespace-nowrap border-2 border-[#1a1625]">
-                            الأمير نور
+                            {t('question.princeNoor')}
                         </div>
                         {/* Decorative Glow */}
                         <div className="absolute inset-0 rounded-full bg-[#ffd700]/20 blur-2xl -z-10 animate-pulse"></div>
@@ -411,15 +420,15 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
 
                       {/* Question Header */}
                       <div className="mb-8 relative z-10 w-full">
-                          <h3 className="text-[#ffd700] text-sm tracking-[0.2em] font-bold uppercase mb-3 opacity-80">سؤال البوابة</h3>
+                          <h3 className="text-[#ffd700] text-sm tracking-[0.2em] font-bold uppercase mb-3 opacity-80">{t('question.header')}</h3>
                           <h2 className="text-white text-2xl md:text-3xl font-black leading-tight drop-shadow-md">
-                            {gameState.activeQuestion.text}
+                            {gameState.activeQuestion.text[language]}
                           </h2>
                       </div>
 
                       {/* Options */}
                       <div className="grid gap-3 w-full relative z-10">
-                          {gameState.activeQuestion.options.map((opt, idx) => {
+                          {gameState.activeQuestion.options[language].map((opt, idx) => {
                               let btnClass = "bg-white/5 border border-white/10 hover:bg-white/10 text-white";
                               let icon = null;
 
@@ -450,10 +459,10 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                       {/* Feedback Text */}
                       <div className="h-8 mt-4 flex items-center justify-center">
                         {showResult === 'wrong' && (
-                            <span className="text-red-400 font-bold text-sm animate-pulse">حاول مرة أخرى!</span>
+                            <span className="text-red-400 font-bold text-sm animate-pulse">{t('question.tryAgain')}</span>
                         )}
                         {showResult === 'correct' && (
-                            <span className="text-green-400 font-bold text-sm">البوابة تفتح...</span>
+                            <span className="text-green-400 font-bold text-sm">{t('question.gateOpening')}</span>
                         )}
                       </div>
 
@@ -466,14 +475,14 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
       {gameState.isGameOver && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#1a1625]/90 backdrop-blur-sm animate-in fade-in duration-500 px-4">
           <div className="flex flex-col items-center text-center p-6 md:p-8 border border-white/10 rounded-3xl bg-black/40 shadow-2xl max-w-md w-full">
-             <h2 className="text-red-500 font-bold text-4xl md:text-5xl mb-6 md:mb-8 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]">انتهت اللعبة</h2>
+             <h2 className="text-red-500 font-bold text-4xl md:text-5xl mb-6 md:mb-8 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]">{t('gameOver.title')}</h2>
              <div className="grid grid-cols-2 gap-3 md:gap-4 w-full mb-6 md:mb-8">
                 <div className="bg-white/5 p-3 md:p-4 rounded-xl flex flex-col items-center border border-white/5">
-                   <span className="text-white/50 text-[10px] md:text-xs tracking-widest mb-1">المسافة المقطوعة</span>
-                   <span className="text-white text-2xl md:text-3xl font-black font-mono">{Math.floor(gameState.distance)}م</span>
+                   <span className="text-white/50 text-[10px] md:text-xs tracking-widest mb-1">{t('gameOver.distance')}</span>
+                   <span className="text-white text-2xl md:text-3xl font-black font-mono">{Math.floor(gameState.distance)}{t('hud.meters')}</span>
                 </div>
                 <div className="bg-white/5 p-3 md:p-4 rounded-xl flex flex-col items-center border border-white/5">
-                   <span className="text-yellow-400/50 text-[10px] md:text-xs tracking-widest mb-1">النجوم المجمعة</span>
+                   <span className="text-yellow-400/50 text-[10px] md:text-xs tracking-widest mb-1">{t('gameOver.stars')}</span>
                    <span className="text-yellow-400 text-2xl md:text-3xl font-black">{gameState.stars}</span>
                 </div>
              </div>
@@ -482,14 +491,14 @@ export const GameUI: React.FC<GameUIProps> = ({ gameState, onRestart, onAnswer, 
                   onClick={onRestart}
                   className="w-full py-4 bg-yellow-400 hover:bg-yellow-300 text-[#1a1625] font-black text-xl rounded-2xl transition-all duration-200 transform hover:scale-[1.02] shadow-[0_0_20px_rgba(250,204,21,0.4)]"
                >
-                  العب مجدداً
+                  {t('gameOver.playAgain')}
                </button>
                {onReturnToMenuClick && (
                  <button
                    onClick={onReturnToMenuClick}
                    className="w-full py-3 bg-black/70 hover:bg-black text-white font-bold text-lg rounded-2xl border border-white/20 transition-all duration-200 transform hover:scale-[1.01]"
                  >
-                   العودة إلى القائمة الرئيسية
+                   {t('gameOver.mainMenu')}
                  </button>
                )}
              </div>

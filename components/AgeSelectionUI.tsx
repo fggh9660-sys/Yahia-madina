@@ -1,18 +1,20 @@
 import React from 'react';
 import { AgeGroup } from '../types';
+import { useLanguage } from '../i18n/useLanguage';
 
 interface AgeSelectionUIProps {
     onSelect: (age: AgeGroup) => void;
 }
 
 export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
-    
+    const { t, dir } = useLanguage();
+
     const cards = [
         {
             id: '5-7',
-            title: 'مستكشف صغير',
-            subtitle: '(5-7 سنوات)',
-            description: 'مغامرات بسيطة وممتعة 🎈',
+            title: t('age.explorer.title'),
+            subtitle: t('age.explorer.range'),
+            description: t('age.explorer.desc'),
             icon: '🔍',
             // Colors for the "Green" theme
             bgGradient: 'from-[#1a2e26] to-[#14231e]', // Deep green bg
@@ -23,9 +25,9 @@ export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
         },
         {
             id: '8-10',
-            title: 'طالب ذكي',
-            subtitle: '(8-10 سنوات)',
-            description: 'تحديات تنمي التفكير 🧠',
+            title: t('age.student.title'),
+            subtitle: t('age.student.range'),
+            description: t('age.student.desc'),
             icon: '📚',
             // Colors for the "Blue" theme
             bgGradient: 'from-[#1a2333] to-[#141824]', // Deep blue bg
@@ -36,9 +38,9 @@ export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
         },
         {
             id: '11-13',
-            title: 'عالم ناشئ',
-            subtitle: '(11-13 سنوات)',
-            description: 'تحديات وأسئلة أعمق 🔬',
+            title: t('age.scientist.title'),
+            subtitle: t('age.scientist.range'),
+            description: t('age.scientist.desc'),
             icon: '🧪',
             // Colors for the "Purple" theme
             bgGradient: 'from-[#251a33] to-[#1d1424]', // Deep purple bg
@@ -50,7 +52,7 @@ export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
     ];
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#1a1625] font-['Cairo'] overflow-y-auto overflow-x-hidden" dir="rtl">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#1a1625] font-['Cairo'] overflow-y-auto overflow-x-hidden" dir={dir}>
             
             {/* Ambient Background Elements */}
             <div className="fixed top-0 left-0 w-full h-full pointer-events-none">
@@ -67,10 +69,10 @@ export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
                          <div className="text-4xl md:text-6xl drop-shadow-[0_0_15px_rgba(255,215,0,0.5)] animate-bounce">🎯</div>
                     </div>
                     <h2 className="text-3xl md:text-5xl font-black text-white drop-shadow-md mb-2 md:mb-3">
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ffd700] to-[#ff9100]">اختر فئتك العمرية</span>
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ffd700] to-[#ff9100]">{t('age.title')}</span>
                     </h2>
                     <p className="text-white/60 text-sm md:text-lg font-bold tracking-wide">
-                        لنختار مغامرة تناسبك ✨
+                        {t('age.subtitle')}
                     </p>
                 </div>
 
@@ -80,7 +82,7 @@ export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
                         <button
                             key={card.id}
                             onClick={() => onSelect(card.id as any)}
-                            className={`group relative w-full text-right transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] outline-none`}
+                            className={`group relative w-full text-start transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] outline-none`}
                         >
                             <div className={`relative overflow-hidden rounded-2xl md:rounded-3xl border-2 ${card.border} bg-gradient-to-br ${card.bgGradient} p-1 transition-all duration-300 ${card.shadow}`}>
                                 
@@ -120,7 +122,7 @@ export const AgeSelectionUI: React.FC<AgeSelectionUIProps> = ({ onSelect }) => {
                  {/* Footer hint */}
                  <div className="mt-6 md:mt-8 flex items-center gap-2 text-white/20 text-[10px] md:text-xs font-bold animate-in fade-in duration-1000 delay-500">
                     <span>💡</span>
-                    <span>يمكنك تغيير الفئة لاحقاً</span>
+                    <span>{t('age.hint')}</span>
                 </div>
             </div>
         </div>

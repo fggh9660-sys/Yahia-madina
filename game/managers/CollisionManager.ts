@@ -8,6 +8,7 @@ import { ShieldItem } from '../objects/ShieldItem';
 import { RewardBox } from '../objects/RewardBox';
 import { MarketAwning } from '../objects/MarketAwning';
 import { MagicCarpet } from '../objects/MagicCarpet';
+import { t, formatDigits } from '../../i18n';
 
 export class CollisionManager {
   private scene: MainScene;
@@ -117,14 +118,14 @@ export class CollisionManager {
       (star as Star).collect();
       this.scene.addScore(10);
       this.scene.playStar();
-      this.scene.showFloatingText((star as Star).x, (star as Star).y, `+١٠`);
+      this.scene.showFloatingText((star as Star).x, (star as Star).y, `+${formatDigits(10)}`);
   }
 
   private handleCollectHeart(player: any, heart: any) {
       (heart as Heart).collect();
       if (this.scene.addHeart()) {
           this.scene.playHeart();
-          this.scene.showFloatingText(heart.x, heart.y, `قلب +`, '#ff4d4d');
+          this.scene.showFloatingText(heart.x, heart.y, t('float.heart'), '#ff4d4d');
       }
   }
 
@@ -132,7 +133,7 @@ export class CollisionManager {
       (shield as ShieldItem).collect();
       this.scene.player.activateShield(10000); 
       this.scene.playHeart();
-      this.scene.showFloatingText(shield.x, shield.y, `درع حماية!`, '#00d2ff');
+      this.scene.showFloatingText(shield.x, shield.y, t('float.shield'), '#00d2ff');
   }
 
   private handleCollectRewardBox(player: any, box: any) {
