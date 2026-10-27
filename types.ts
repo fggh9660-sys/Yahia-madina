@@ -6,9 +6,14 @@ export type AgeGroup = '5-7' | '8-10' | '11-13';
 // so switching language re-translates whatever is currently on screen.
 
 export interface NoorMessage {
-    textKey: TranslationKey;
+    /** UI string key; re-translated when the language changes. */
+    textKey?: TranslationKey;
+    /** Raw line (M4 data files are not translated yet). Used when textKey is absent. */
+    text?: string;
     duration?: number; // ms, default 3000
     isSoftPause?: boolean; // If true, requires tap to dismiss/resume
+    /** M4 (system 4): optional visual-memory key shown beside Noor (emoji placeholder; final art = Yahia). */
+    visual?: string;
 }
 
 // --- MINI PUZZLES (Storm / Library / Dual Path) ---
@@ -31,6 +36,8 @@ export interface StageResultsData {
   correctAnswers: number;
   wrongAnswers: number;
   timeSeconds: number;
+  /** M4 (system 9): forward-hook teaser shown at stage end, hinting the next destination/mystery. */
+  cliffhanger?: string;
 }
 
 export interface GameState {
@@ -64,6 +71,49 @@ export interface GameState {
   activePuzzle?: ActivePuzzle | null;
   /** True when the pause menu is open (Resume / Restart / Return to menu). */
   isPaused?: boolean;
+  /** M2-R1: full-screen lore modal triggered on knowledge fragment pickup. Tap anywhere → dismiss. */
+  activeFragmentLore?: { id: string; title: string; body: string; isRare?: boolean } | null;
+  /** M3A: mini-challenge modal triggered by encounter (replaces old activeQuestion popup flow). */
+  activeMiniChallenge?: import('./game/data/miniChallenges').MiniChallenge | null;
+  /** M3A: live collection progress — shown in HUD + collection screen. */
+  collection?: { collected: number; total: number; percent: number };
+  /** M3A-R1: true while the in-game Noor color-discovery moment is open (relocated from pre-gameplay setup). */
+  activeColorChoice?: boolean;
+  /** M4: active Lost Book page discovery modal (curiosity → reveal → knowledge + visual). null when none. */
+  activeLostBookPage?: LostBookPageView | null;
+  /** M4: live long-term progression snapshot for the HUD + Library hub. */
+  m4?: M4Snapshot | null;
+}
+
+/** M4: the page data React needs to render the discovery modal (subset of LostBookPage). */
+export interface LostBookPageView {
+  id: string;
+  chapter: number;
+  page: number;
+  story: string;
+  curiosity: string;
+  knowledge: string;
+  /** M4 (Yahia 2026-06-25): intermediate hint shown between question and answer (Noor's clue). */
+  clue: string;
+  visual: string;
+  extra?: string;
+  noorComment: string;
+  mystery: 'small' | 'medium' | 'major';
+  /**
+   * M4: which beat of the Curiosity Journey this modal is showing (Question → Clue → Answer).
+   *  - 'curiosity' = the question only (answer not yet found — keep playing).
+   *  - 'clue'      = an intermediate hint from Noor (still keep playing).
+   *  - 'knowledge' = the answer + visual, where Noor connects everything and the page is restored.
+   */
+  mode: 'curiosity' | 'clue' | 'knowledge';
+}
+
+/** M4: progression numbers surfaced to the UI. */
+export interface M4Snapshot {
+  pagesRestored: number;
+  totalPages: number;
+  chaptersComplete: number;
+  achievementsUnlocked: number;
 }
 
 export interface Question {
@@ -72,6 +122,10 @@ export interface Question {
   options: Localized<string[]>;
   correctIndex: number;
   category?: 'math' | 'logic' | 'trivia' | 'science' | 'history' | 'geography' | 'language';
+  /** M2: stage tag. 1 = desert/heritage, 2 = city/knowledge, undefined = general fallback. */
+  stage?: 1 | 2;
+  /** M2: thematic group used for category-aware encounter framing. */
+  theme?: 'heritage' | 'knowledge' | 'general';
 }
 
 // Colors for the Arabic/Evening theme

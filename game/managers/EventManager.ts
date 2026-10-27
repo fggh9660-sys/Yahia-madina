@@ -1,25 +1,33 @@
 
 import Phaser from 'phaser';
-import { PROGRESS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
+import { PROGRESS, BRIDGE_WIND, BRIDGE_COLLAPSE, PATH_FORK, PHYSICS, getPlayerStartX, getGroundY, getPlayerSpawnY, GROUND_TILE_HEIGHT } from '../../constants';
+import { BridgeTile } from '../objects/BridgeTile';
+// M2-R3 (Yahia 2026-05-31): Split Path system removed entirely. PathFork + PathLaneTile classes
+// kept on disk in case Choose-Your-Path mini-challenge in M3a wants reference assets, but no longer
+// imported. The redesigned Choose-Your-Path will be built fresh as mini-challenge #6.
+import { Star } from '../objects/Star';
 import { MainScene } from '../scenes/MainScene';
 import { MagicGate } from '../objects/MagicGate';
 import { MagicChest } from '../objects/MagicChest';
+import { CHALLENGE_EVENTS, type ChallengeEvent } from '../data/miniChallenges';
 import { BedouinTent } from '../objects/BedouinTent';
 import { LibraryBuilding } from '../objects/LibraryBuilding';
 import { MagicCarpet } from '../objects/MagicCarpet';
 import { Obstacle } from '../objects/Obstacle';
 import type { ActivePuzzle } from '../../types';
 
-export type EventPhase = 
-    'NONE' | 
+export type EventPhase =
+    'NONE' |
     'NUR_INTRO' |
-    'INTRO_RUN' | 
+    'INTRO_RUN' |
     'LEVEL_END_APPROACH' | 'LEVEL_END_GATE' | 'LEVEL_TRANSITION' |
     'STAGE_2_INTRO' |
-    'RECOVERY' | 
-    'SANDSTORM_ONSET' | 'SANDSTORM_WALK' | 'SANDSTORM_APPROACH' | 'SANDSTORM_SHELTER' | 
-    'LIBRARY_APPROACH' | 'LIBRARY_ENTRY' | 
-    'CARPET_RIDE' | 
+    'RECOVERY' |
+    'SANDSTORM_ONSET' | 'SANDSTORM_WALK' | 'SANDSTORM_APPROACH' | 'SANDSTORM_SHELTER' |
+    'BRIDGE_WIND' |
+    'BRIDGE_COLLAPSE' |
+    'LIBRARY_APPROACH' | 'LIBRARY_ENTRY' |
+    'CARPET_RIDE' |
     'HANGING';
 
 export type EncounterType = 'NONE' | 'GATE' | 'CHEST' | 'CARPET';
@@ -33,6 +41,10 @@ export class EventManager {
   public queuedEncounter: EncounterType = 'NONE';
   public isEncounterActive: boolean = false;
   public isEncounterOpening: boolean = false;
+  // M3B: themed event for the current encounter (Storm/Oasis/Ruins/Caravan) — selected per chest and
+  // passed to the mini-challenge so it surfaces the event's linked type. Rotates so all 4 appear.
+  private encounterTheme: ChallengeEvent = 'storm';
+  private encounterThemeIdx: number = 0;
   
   public currentGate: MagicGate | null = null;
   public currentChest: MagicChest | null = null;
@@ -70,11 +82,13 @@ export class EventManager {
 
   /** Distance in meters within library zone before carpet spawns (tunable) */
   public readonly STAGE_2_LENGTH_M = PROGRESS.STAGE_2_LENGTH_M;
+  public readonly STAGE_3_LENGTH_M = PROGRESS.STAGE_3_LENGTH_M;
   private readonly CARPET_SPAWN_DIST_M = 400;
   private carpetMissed: boolean = false;
   private nextCarpetSpawnPos: number = 0;
   /** True once Stage 2 has been ended (library results shown) so we don't trigger again. */
   private stage2EndTriggered: boolean = false;
+  private stage3EndTriggered: boolean = false;
 
   /** City road carpet: visible on the path; when player reaches it, Nur invites then ride. */
   private hasSpawnedRoadCarpet: boolean = false;
@@ -87,6 +101,34 @@ export class EventManager {
   
   // Tutorial Flags for Flow
   private hasTriggeredRooftopTutorial: boolean = false;
+
+  // Bridge wind set-piece (Day 2 + Day 4 refinement) — disabled in favor of BRIDGE_COLLAPSE
+  // per Yahia 2026-05-22 pivot. Code retained in case wind variant is revived.
+  public bridgeWindTriggered: boolean = false;
+  private bridgeWindStartDistance: number = 0;
+  public bridgeFell: boolean = false;
+  private bridgeGustTimers: Phaser.Time.TimerEvent[] = [];
+  public bridgeGustActive: boolean = false;
+
+  // Collapsing bridge (Wk1 Day 5 — Yahia 2026-05-22 pivot + 2026-05-23 sectioned/checkpoint refinement)
+  public bridgeCollapseTriggered: boolean = false;
+  private bridgeCollapseStartDistance: number = 0;
+  private bridgeCollapseStartTime: number = 0;
+  public bridgeTiles: BridgeTile[] = [];
+  private bridgeTileSpawnX: number = 0;
+  private bridgeSectionCounter: number = 0;
+  private nextSectionRemaining: number = 0;
+  private currentSectionId: number = 0;
+  private bridgeCollapseSchedTimer: Phaser.Time.TimerEvent | null = null;
+  public lastBridgeCheckpointX: number = 0;
+  private nextCheckpointDistance: number = 0;
+  public bridgeCheckpoints: Phaser.GameObjects.Sprite[] = [];
+
+  // Branching paths / Split Path Event (Wk 1 Day 5 → polished per Yahia 2026-05-23 ref)
+  // M2-R3: split path state retained as stubs only — activeTrack kept so SpawnManager's
+  // track-bonus block compiles, but it's always 'NONE' now.
+  public activeTrack: 'NONE' | 'A' | 'B' = 'NONE';
+  // M2-R3: pathFork countdown, lane tiles, upper-lane state all removed with Split Path system.
 
   // Puzzle sequences (storm: 3–5 puzzles; library: 3–5 puzzles)
   private stormPuzzleQueue: ActivePuzzle[] = [];
@@ -103,6 +145,10 @@ export class EventManager {
   }
 
   public update(frameMove: number, delta: number) {
+      this.checkBridgeWindExit();
+      this.checkBridgeCollapseExit();
+      this.updateBridgeTiles(frameMove);
+      // M2-R3: Split Path system removed — no fork spawn, no fork update, no upper lane.
       if (this.currentGate) {
           if (this.currentGate.active) this.currentGate.update(frameMove);
           else this.currentGate = null;
@@ -247,6 +293,7 @@ export class EventManager {
           if (this.eventPhase === 'NONE') {
               this.checkLevelEnd();
               this.checkStage2End();
+              this.checkStage3End();
               this.checkLibraryEvent();
               this.checkCityRoadCarpet();
           }
@@ -266,6 +313,18 @@ export class EventManager {
           this.stage2EndTriggered = true;
           this.scene.setGameSpeed(0);
           this.scene.showLibraryStageResults();
+      }
+  }
+
+  /** M3B — end Stage 3 after the full Observatory run, then roll into the finale. */
+  private checkStage3End() {
+      if (this.stage3EndTriggered || this.scene.getCurrentStage() !== 3) return;
+      if (this.scene.environmentManager.getZone() !== 'OBSERVATORY') return;
+      const distInObs = this.scene.environmentManager.getObservatoryRunDistance();
+      if (distInObs >= this.STAGE_3_LENGTH_M) {
+          this.stage3EndTriggered = true;
+          this.scene.setGameSpeed(0);
+          this.scene.showObservatoryStageResults();
       }
   }
 
@@ -712,6 +771,380 @@ export class EventManager {
       return true;
   }
 
+  /**
+   * Wind bridge set-piece (Day 2): enters BRIDGE_WIND phase as the player approaches
+   * the library. Persistent lateral wind force is applied to the player; visuals + audio
+   * are still TODO (Step 3). Phase auto-exits after BRIDGE_WIND.SEGMENT_LENGTH_M meters.
+   */
+  public triggerBridgeWind(): boolean {
+      if (this.bridgeWindTriggered) return false;
+      if (this.eventPhase !== 'NONE') return false;
+      this.bridgeWindTriggered = true;
+      this.bridgeWindStartDistance = this.scene.getRunDistance();
+      this.bridgeFell = false;
+      this.eventPhase = 'BRIDGE_WIND';
+      this.scene.showNoorMessage("احذر! الرياح القوية على الجسر! 🌬️", false, 'warning');
+      this.scene.setBridgeWindActive?.(true);
+
+      // Schedule periodic gusts during the bridge — distributed across the segment.
+      const segMs = (BRIDGE_WIND.SEGMENT_LENGTH_M / PROGRESS.DISTANCE_SCALE) / Math.max(1, PHYSICS.RUN_SPEED) * 1000;
+      const interval = segMs / (BRIDGE_WIND.GUST_COUNT + 1);
+      for (let i = 1; i <= BRIDGE_WIND.GUST_COUNT; i++) {
+          const t = this.scene.time.delayedCall(interval * i, () => this.fireGust());
+          this.bridgeGustTimers.push(t);
+      }
+      return true;
+  }
+
+  /** Brief gust event during the bridge — strong wind spike + camera shake. */
+  private fireGust() {
+      if (this.eventPhase !== 'BRIDGE_WIND') return;
+      this.bridgeGustActive = true;
+      this.scene.cameras.main.shake(
+          BRIDGE_WIND.GUST_DURATION_MS,
+          new Phaser.Math.Vector2(BRIDGE_WIND.GUST_SHAKE_INTENSITY, BRIDGE_WIND.GUST_SHAKE_INTENSITY * 0.4),
+      );
+      this.scene.time.delayedCall(BRIDGE_WIND.GUST_DURATION_MS, () => { this.bridgeGustActive = false; });
+  }
+
+  /** 0..1 progress through the bridge segment. Used by Player.ts to escalate wind force. */
+  public getBridgeWindProgress(): number {
+      if (this.eventPhase !== 'BRIDGE_WIND') return 0;
+      const distInBridge = this.scene.getRunDistance() - this.bridgeWindStartDistance;
+      return Math.max(0, Math.min(1, distInBridge / BRIDGE_WIND.SEGMENT_LENGTH_M));
+  }
+
+  /**
+   * Wk1 Day 5: collapsing bridge entry. Replaces wind mechanic per Yahia 2026-05-22.
+   * Player runs onto the bridge normally; after PRELUDE_MS, tiles begin collapsing in front
+   * of the player and they must jump across gaps. Falling = full game-over and restart at
+   * city entrance.
+   */
+  public triggerBridgeCollapse(): boolean {
+      if (this.bridgeCollapseTriggered) return false;
+      if (this.eventPhase !== 'NONE') return false;
+      this.bridgeCollapseTriggered = true;
+      this.bridgeFell = false;
+      this.eventPhase = 'BRIDGE_COLLAPSE';
+      this.bridgeCollapseStartDistance = this.scene.getRunDistance();
+      this.bridgeCollapseStartTime = this.scene.time.now;
+      // Clear pre-existing obstacles / collectibles that are still on screen so the bridge entry
+      // is a clean stage, not a chaotic overlap of leftover city spawns + tiles.
+      this.scene.spawnManager?.removeAllSpawned();
+      this.scene.showNoorMessage("الجسر ينهار! اقفز فوق الفجوات! 🌉", false, 'warning');
+      this.scene.setBridgeWindActive?.(true);
+      this.scene.cameras.main.shake(
+          BRIDGE_COLLAPSE.ENTRY_SHAKE_MS,
+          new Phaser.Math.Vector2(0, BRIDGE_COLLAPSE.ENTRY_SHAKE_INTENSITY),
+      );
+      this.scene.hitStop?.(BRIDGE_COLLAPSE.ENTRY_HITSTOP_MS, BRIDGE_COLLAPSE.ENTRY_HITSTOP_SCALE);
+      this.scene.audioManager?.playStarPitched(-400);
+
+      const groundY = getGroundY(this.scene.scale.height);
+      const tileTopY = groundY - BRIDGE_COLLAPSE.TILE_HEIGHT / 2 - 2;
+      const playerX = this.scene.player?.x ?? getPlayerStartX(this.scene.scale.width);
+      // Pre-fill tiles from a bit before the player to past the right edge — bridge surface
+      // is visible immediately when the phase begins. Tiles are grouped into sections so the
+      // collapse picks a contiguous chunk rather than a single tile.
+      const startTileX = playerX - BRIDGE_COLLAPSE.TILE_WIDTH * 2;
+      const endTileX = this.scene.scale.width + 400;
+      const tileCount = Math.ceil((endTileX - startTileX) / BRIDGE_COLLAPSE.TILE_WIDTH);
+      this.bridgeSectionCounter = 0;
+      this.nextSectionRemaining = 0;
+      for (let i = 0; i < tileCount; i++) {
+          const t = new BridgeTile(this.scene, startTileX + i * BRIDGE_COLLAPSE.TILE_WIDTH, tileTopY);
+          t.sectionId = this.assignSectionId();
+          this.bridgeTiles.push(t);
+      }
+      this.bridgeTileSpawnX = startTileX + tileCount * BRIDGE_COLLAPSE.TILE_WIDTH;
+      this.lastBridgeCheckpointX = playerX;
+      this.nextCheckpointDistance = this.bridgeCollapseStartDistance + BRIDGE_COLLAPSE.CHECKPOINT_INTERVAL_M;
+      this.scene.startBridgeAmbientDebris?.();
+      this.scheduleNextCollapse();
+      return true;
+  }
+
+  /** Returns the next section ID — increments after `currentSectionSize()` tiles are placed in that section. */
+  private assignSectionId(): number {
+      if (this.nextSectionRemaining <= 0) {
+          this.bridgeSectionCounter++;
+          this.currentSectionId = this.bridgeSectionCounter;
+          this.nextSectionRemaining = this.currentSectionSize();
+      }
+      this.nextSectionRemaining--;
+      return this.currentSectionId;
+  }
+
+  /** Section size escalates with phase progress per Yahia's progression spec. */
+  private currentSectionSize(): number {
+      const p = this.getBridgeCollapseProgress();
+      if (p < BRIDGE_COLLAPSE.EARLY_PHASE_END_RATIO) return BRIDGE_COLLAPSE.SECTION_SIZE_EARLY;
+      if (p < BRIDGE_COLLAPSE.MID_PHASE_END_RATIO) return BRIDGE_COLLAPSE.SECTION_SIZE_MID;
+      return BRIDGE_COLLAPSE.SECTION_SIZE_LATE;
+  }
+
+  /** Picks the right collapse interval based on phase progress and schedules the next tile crack. */
+  private scheduleNextCollapse() {
+      if (this.eventPhase !== 'BRIDGE_COLLAPSE') return;
+      const elapsedMs = this.scene.time.now - this.bridgeCollapseStartTime;
+      if (elapsedMs < BRIDGE_COLLAPSE.PRELUDE_MS) {
+          this.bridgeCollapseSchedTimer = this.scene.time.delayedCall(BRIDGE_COLLAPSE.PRELUDE_MS - elapsedMs, () => this.scheduleNextCollapse());
+          return;
+      }
+      const progress = this.getBridgeCollapseProgress();
+      let interval: number;
+      if (progress < BRIDGE_COLLAPSE.EARLY_PHASE_END_RATIO) interval = BRIDGE_COLLAPSE.EARLY_COLLAPSE_INTERVAL_MS;
+      else if (progress < BRIDGE_COLLAPSE.MID_PHASE_END_RATIO) interval = BRIDGE_COLLAPSE.MID_COLLAPSE_INTERVAL_MS;
+      else interval = BRIDGE_COLLAPSE.LATE_COLLAPSE_INTERVAL_MS;
+
+      // Pick a SECTION (group of tiles sharing sectionId) in the right-half of the screen
+      // so the collapse reads as a chunk breaking rather than a single isolated tile.
+      const W = this.scene.scale.width;
+      const candidates = this.bridgeTiles.filter(
+          t => t.active && t.tileState === 'normal' && t.x > W * 0.4 && t.x < W + 100,
+      );
+      if (candidates.length > 0) {
+          const pick = candidates[Phaser.Math.Between(0, candidates.length - 1)];
+          const sectionTiles = this.bridgeTiles.filter(t => t.active && t.tileState === 'normal' && t.sectionId === pick.sectionId);
+          // Stagger crack starts across the section for a "spreading" visual effect.
+          sectionTiles.forEach((tile, i) => {
+              this.scene.time.delayedCall(i * BRIDGE_COLLAPSE.CRACK_SPREAD_STAGGER_MS, () => {
+                  if (tile.active) tile.startCrack();
+              });
+          });
+      }
+      this.bridgeCollapseSchedTimer = this.scene.time.delayedCall(interval, () => this.scheduleNextCollapse());
+  }
+
+  /** 0..1 progress through collapse phase. */
+  public getBridgeCollapseProgress(): number {
+      if (this.eventPhase !== 'BRIDGE_COLLAPSE') return 0;
+      const dist = this.scene.getRunDistance() - this.bridgeCollapseStartDistance;
+      return Math.max(0, Math.min(1, dist / BRIDGE_COLLAPSE.PHASE_LENGTH_M));
+  }
+
+  /** Returns true if the player at this x position is over a collapsed tile (i.e., a gap). */
+  public isOverCollapsedGap(playerX: number): boolean {
+      const half = BRIDGE_COLLAPSE.TILE_WIDTH / 2;
+      for (const tile of this.bridgeTiles) {
+          if (tile.active && tile.tileState === 'collapsed' && Math.abs(playerX - tile.x) < half) {
+              return true;
+          }
+      }
+      return false;
+  }
+
+  /** Update tile positions (called from MainScene every frame with frameMove). */
+  public updateBridgeTiles(frameMove: number) {
+      // Scroll each tile + cull off-screen
+      for (let i = this.bridgeTiles.length - 1; i >= 0; i--) {
+          const t = this.bridgeTiles[i];
+          if (!t.active) {
+              this.bridgeTiles.splice(i, 1);
+              continue;
+          }
+          t.scrollWith(frameMove);
+      }
+      // Continuous tile generation — keep tiles spawning from right edge until phase ends
+      if (this.eventPhase === 'BRIDGE_COLLAPSE') {
+          this.bridgeTileSpawnX -= frameMove;
+          if (this.bridgeTileSpawnX < this.scene.scale.width + 200) {
+              const groundY = getGroundY(this.scene.scale.height);
+              const tileTopY = groundY - BRIDGE_COLLAPSE.TILE_HEIGHT / 2 - 2;
+              const t = new BridgeTile(this.scene, this.scene.scale.width + 220, tileTopY);
+              t.sectionId = this.assignSectionId();
+              this.bridgeTiles.push(t);
+              this.bridgeTileSpawnX = this.scene.scale.width + 220 + BRIDGE_COLLAPSE.TILE_WIDTH;
+          }
+          this.updateBridgeCheckpoints(frameMove);
+      }
+  }
+
+  /** Update checkpoint sprites + spawn new ones at safe spacing. Track when player passes a
+   *  checkpoint so fall-respawn uses the most recent safe x position. */
+  private updateBridgeCheckpoints(frameMove: number) {
+      const dist = this.scene.getRunDistance();
+      const groundY = getGroundY(this.scene.scale.height);
+      // Spawn new checkpoint if we've passed the spacing interval
+      if (dist >= this.nextCheckpointDistance && dist - this.bridgeCollapseStartDistance < BRIDGE_COLLAPSE.PHASE_LENGTH_M) {
+          this.nextCheckpointDistance += BRIDGE_COLLAPSE.CHECKPOINT_INTERVAL_M;
+          const flag = this.spawnCheckpointFlag(this.scene.scale.width + 100, groundY);
+          this.bridgeCheckpoints.push(flag);
+      }
+      // Scroll + cull
+      const playerX = this.scene.player?.x ?? 0;
+      for (let i = this.bridgeCheckpoints.length - 1; i >= 0; i--) {
+          const flag = this.bridgeCheckpoints[i];
+          if (!flag.active) {
+              this.bridgeCheckpoints.splice(i, 1);
+              continue;
+          }
+          flag.x -= frameMove;
+          // Flags are now cosmetic progress markers only — fall respawn always returns to
+          // the bridge start (lastBridgeCheckpointX set once at trigger). Per Nanda 2026-05-23.
+          if (flag.x <= playerX + 4 && flag.x > playerX - 100 && !(flag as unknown as { passed?: boolean }).passed) {
+              (flag as unknown as { passed: boolean }).passed = true;
+              this.scene.tweens.add({
+                  targets: flag,
+                  scale: { from: 1, to: 1.3 },
+                  duration: 220,
+                  yoyo: true,
+                  ease: 'Sine.easeOut',
+              });
+              flag.setTint(0x9be8b0);
+          }
+          if (flag.x < -50) {
+              flag.destroy();
+              this.bridgeCheckpoints.splice(i, 1);
+          }
+      }
+  }
+
+  /** Generate a small green checkpoint flag (canvas-textured) at the given ground position. */
+  private spawnCheckpointFlag(x: number, groundY: number): Phaser.GameObjects.Sprite {
+      const TEX = 'bridge_checkpoint_flag';
+      if (!this.scene.textures.exists(TEX)) {
+          const w = 16, h = 70;
+          const canvas = this.scene.textures.createCanvas(TEX, w, h);
+          if (canvas) {
+              const ctx = canvas.context;
+              // Pole
+              ctx.fillStyle = '#3a2f24';
+              ctx.fillRect(w / 2 - 1, 0, 2, h);
+              // Flag (green pennant)
+              ctx.fillStyle = `#${BRIDGE_COLLAPSE.CHECKPOINT_FLAG_COLOR.toString(16).padStart(6, '0')}`;
+              ctx.beginPath();
+              ctx.moveTo(w / 2, 4);
+              ctx.lineTo(w, 12);
+              ctx.lineTo(w / 2, 22);
+              ctx.closePath();
+              ctx.fill();
+              canvas.refresh();
+          }
+      }
+      const flag = this.scene.add.sprite(x, groundY - 12, TEX);
+      flag.setOrigin(0.5, 1).setDepth(11);
+      return flag;
+  }
+
+  /** Called every frame; exits BRIDGE_COLLAPSE phase when segment is fully traversed. */
+  private checkBridgeCollapseExit() {
+      if (this.eventPhase !== 'BRIDGE_COLLAPSE') return;
+      const dist = this.scene.getRunDistance() - this.bridgeCollapseStartDistance;
+      if (dist >= BRIDGE_COLLAPSE.PHASE_LENGTH_M) {
+          this.eventPhase = 'NONE';
+          this.scene.setBridgeWindActive?.(false);
+          this.scene.stopBridgeAmbientDebris?.();
+          if (this.bridgeCollapseSchedTimer) this.bridgeCollapseSchedTimer.remove(false);
+          this.bridgeCollapseSchedTimer = null;
+          if (!this.bridgeFell) {
+              this.scene.addScore(BRIDGE_COLLAPSE.SURVIVAL_BONUS_SCORE);
+              const player = this.scene.player;
+              if (player) {
+                  this.scene.showFloatingText(player.x, player.y - 80, `+${BRIDGE_COLLAPSE.SURVIVAL_BONUS_SCORE} نجوت!`, '#ffd700');
+              }
+              this.scene.audioManager?.playStarPitched(800);
+              // Step 10: spawn star cluster as bridge exit reward + Noor dialogue moment
+              this.spawnBridgeExitReward();
+              this.scene.showNoorMessage("أحسنت! عبرت الجسر بأمان! 🎉", false, 'success');
+          }
+          // Cleanup remaining bridge tiles + checkpoints so they don't visually overlap with
+          // the library trigger which fires shortly after bridge exit (~10m later in city).
+          this.scene.time.delayedCall(300, () => {
+              for (const t of this.bridgeTiles) {
+                  if (t.active && t.tileState === 'normal') t.collapse();
+              }
+              this.scene.time.delayedCall(BRIDGE_COLLAPSE.COLLAPSE_DURATION_MS, () => {
+                  for (const t of this.bridgeTiles) {
+                      if (t.active) t.destroy();
+                  }
+                  this.bridgeTiles = [];
+                  for (const c of this.bridgeCheckpoints) {
+                      if (c.active) c.destroy();
+                  }
+                  this.bridgeCheckpoints = [];
+              });
+          });
+      }
+  }
+
+  /** Spawn a star reward cluster just after the bridge exit (Step 10). */
+  private spawnBridgeExitReward() {
+      const groundY = getGroundY(this.scene.scale.height);
+      const baseX = this.scene.scale.width + 80;
+      const starGap = 56;
+      for (let i = 0; i < BRIDGE_COLLAPSE.REWARD_STAR_COUNT; i++) {
+          const t = i / Math.max(1, BRIDGE_COLLAPSE.REWARD_STAR_COUNT - 1);
+          const x = baseX + i * starGap;
+          // Gentle arc — peak at center
+          const y = groundY - 80 - 40 * Math.sin(t * Math.PI);
+          this.scene.spawnManager?.stars.add(new Star(this.scene, x, y));
+      }
+  }
+
+  /**
+   * Split Path Event (per Yahia ref doc): single-shot trigger after the collapsing bridge
+   * fully completes. Spawns the fork marker, fires Noor dialogue, starts a 2-second
+   * countdown window for the player to choose Knowledge (left) or Speed (right).
+   */
+  // M2-R3 (Yahia 2026-05-31): Split Path system removed entirely. All maybeSpawnPathFork,
+  // updatePathForks, resetPathForks, startUpperLane, stopUpperLane, updateUpperLane methods
+  // deleted. Reintroduce as a clean "Choose Your Path" mini-challenge in M3a, not a parallel-track
+  // architecture layered onto the runner.
+  public resetPathForks() {
+      // Stub kept so MainScene.initializeState can still call it without import errors.
+      this.activeTrack = 'NONE';
+  }
+
+  /** Reset all collapsing-bridge state (called on scene restart or fall-to-city-entrance reset). */
+  public resetBridgeCollapse() {
+      if (this.bridgeCollapseSchedTimer) this.bridgeCollapseSchedTimer.remove(false);
+      this.bridgeCollapseSchedTimer = null;
+      for (const t of this.bridgeTiles) {
+          if (t.active) t.destroy();
+      }
+      this.bridgeTiles = [];
+      for (const c of this.bridgeCheckpoints) {
+          if (c.active) c.destroy();
+      }
+      this.bridgeCheckpoints = [];
+      this.bridgeCollapseTriggered = false;
+      this.bridgeCollapseStartDistance = 0;
+      this.bridgeCollapseStartTime = 0;
+      this.bridgeSectionCounter = 0;
+      this.nextSectionRemaining = 0;
+      this.lastBridgeCheckpointX = 0;
+      this.nextCheckpointDistance = 0;
+      this.scene.stopBridgeAmbientDebris?.();
+      if (this.eventPhase === 'BRIDGE_COLLAPSE') {
+          this.eventPhase = 'NONE';
+          this.scene.setBridgeWindActive?.(false);
+      }
+  }
+
+  /** Called every frame while bridge phase is active; exits the phase when segment length is covered. */
+  private checkBridgeWindExit() {
+      if (this.eventPhase !== 'BRIDGE_WIND') return;
+      const distInBridge = this.scene.getRunDistance() - this.bridgeWindStartDistance;
+      if (distInBridge >= BRIDGE_WIND.SEGMENT_LENGTH_M) {
+          this.eventPhase = 'NONE';
+          this.scene.setBridgeWindActive?.(false);
+          // Survival reward — player made it without falling
+          if (!this.bridgeFell) {
+              this.scene.addScore(BRIDGE_WIND.SURVIVAL_BONUS_SCORE);
+              const player = this.scene.player;
+              if (player) {
+                  this.scene.showFloatingText(player.x, player.y - 80, `+${BRIDGE_WIND.SURVIVAL_BONUS_SCORE} نجوت!`, '#ffd700');
+              }
+              this.scene.audioManager?.playStarPitched(800);
+          }
+          // Cancel any remaining gust timers
+          this.bridgeGustTimers.forEach(t => t.remove(false));
+          this.bridgeGustTimers = [];
+          this.bridgeGustActive = false;
+      }
+  }
+
   private triggerLibraryArrival() {
       this.eventPhase = 'LIBRARY_ENTRY';
       this.scene.setGameSpeed(0);
@@ -848,6 +1281,14 @@ export class EventManager {
   }
 
   /** Called by MainScene after any puzzle is resolved; advances storm/library sequence or no-op. */
+  /** M3B fix (2026-06-07): true while a storm/library puzzle SEQUENCE is still running (the next puzzle
+   *  is queued via delayedCall, not yet shown). resolvePuzzle uses this so it doesn't resume the run
+   *  mid-sequence during the inter-puzzle delay — that mid-sequence resume let the run scroll into the
+   *  library-end / another encounter and broke the sequence, freezing the game after the Library event. */
+  public isPuzzleSequenceActive(): boolean {
+      return this.stormPuzzleQueue.length > 0 || this.libraryPuzzleSequenceActive;
+  }
+
   public reportPuzzleResolved(isCorrect: boolean) {
       if (this.stormPuzzleQueue.length > 0 && this.eventPhase === 'SANDSTORM_SHELTER') {
           this.stormPuzzleIndex++;
@@ -865,7 +1306,9 @@ export class EventManager {
       if (this.libraryPuzzleQueue.length > 0 && this.libraryPuzzleSequenceActive) {
           this.libraryPuzzleIndex++;
           if (this.libraryPuzzleIndex < this.libraryPuzzleQueue.length) {
-              this.scene.time.delayedCall(600, () => {
+              // M2-R3 library pacing fix (Yahia 2026-05-31): bumped 600ms → 1800ms so puzzles
+              // feel paced with breathing room instead of whipping by.
+              this.scene.time.delayedCall(1800, () => {
                   this.scene.showPuzzle(this.libraryPuzzleQueue[this.libraryPuzzleIndex]);
               });
           } else {
@@ -911,7 +1354,10 @@ export class EventManager {
       this.scene.setGameSpeed(1.0);
       if (this.scene.physics.world.isPaused) this.scene.physics.resume();
       this.scene.player.anims.resume();
-      this.scene.tweens.add({ targets: this.scene.player, x: getPlayerStartX(this.scene.scale.width), duration: 2000, ease: 'Power2.inOut' });
+      // No scripted x-tween here: a blocking tween kept Player.update's isTweening guard true and ate
+      // jump/move input for its whole duration after the storm (Yahia 2026-06-20). The grounded
+      // auto-runner snap in Player.update glides the player back to startX with input fully live —
+      // matching resumeRunInLibrary, which never had this problem.
       this.eventPhase = 'NONE';
       this.encounterType = 'NONE';
       this.isEncounterActive = false;
@@ -959,10 +1405,17 @@ export class EventManager {
       return false;
   }
 
-  private spawnChestPattern(x: number, groundY: number) {
+  private spawnChestPattern(x: number, groundY: number, forcedTheme?: ChallengeEvent) {
       this.isEncounterActive = true;
       this.encounterType = 'CHEST';
       this.isEncounterOpening = false;
+      // M3B: assign this encounter a themed event, rotating so Storm/Oasis/Ruins/Caravan all appear.
+      // forcedTheme is used by the debug spawner so a specific event can be previewed on demand.
+      this.encounterTheme = forcedTheme ?? CHALLENGE_EVENTS[this.encounterThemeIdx % CHALLENGE_EVENTS.length];
+      if (!forcedTheme) this.encounterThemeIdx++;
+      // M3B: spawn the themed set-piece (oasis/ruins/caravan/storm) around the chest so the event reads
+      // as a real place in the world. Scrolls + freezes with everything else via the decorations group.
+      this.scene.environmentManager.roadside.spawnThemedDecoration(this.encounterTheme, x + 300, groundY);
       const onPlatform = Math.random() > 0.4;
       if (onPlatform) {
           const platY = groundY - 100;
@@ -972,6 +1425,18 @@ export class EventManager {
           this.currentChest = new MagicChest(this.scene, x + 300, groundY - 25, true);
           this.scene.spawnManager.obstacles.add(new Obstacle(this.scene, x + 100, groundY, 'rock'));
       }
+  }
+
+  /** M3B (TEMPORARY debug/review): force-spawn a themed chest encounter just off the right edge so a
+   *  specific event (oasis/ruins/caravan/storm) can be previewed on demand. Returns false if an
+   *  encounter is already active. Exposed via window.__krSpawnChest('oasis'|'ruins'|'caravan'|'storm'). */
+  public debugSpawnThemedChest(theme: ChallengeEvent): boolean {
+      if (this.isEncounterActive) return false;
+      if (this.eventPhase !== 'NONE' && this.eventPhase !== 'INTRO_RUN') return false;
+      const groundY = getGroundY(this.scene.scale.height);
+      // chest spawns at x + 300, so place it just off the right edge to scroll in quickly.
+      this.spawnChestPattern(this.scene.scale.width - 200, groundY, theme);
+      return true;
   }
 
   public handleEncounterPause(playerX: number) {
@@ -988,16 +1453,19 @@ export class EventManager {
 
       if (objectX <= stopX && !this.isEncounterOpening) {
           if (this.encounterType === 'CHEST') {
-              this.scene.pauseGameplayForQuestion();
+              this.scene.pauseGameplayForQuestion(undefined, this.encounterTheme);
           }
       }
   }
 
   public reset() {
-      this.eventPhase = 'NUR_INTRO'; 
+      this.eventPhase = 'NUR_INTRO';
       this.introTimer = 0;
       this.encounterType = 'NONE';
       this.queuedEncounter = 'NONE';
+      this.stage2EndTriggered = false;
+      this.stage3EndTriggered = false;
+      this.encounterThemeIdx = 0;
       this.isEncounterActive = false;
       this.isEncounterOpening = false;
       this.sandstormTriggered = false; 
@@ -1008,7 +1476,11 @@ export class EventManager {
       this.levelEndTriggered = false;
       this.hasTransitionedToCity = false;
       this.hasTriggeredRooftopTutorial = false;
-      
+      this.bridgeWindTriggered = false;
+      this.bridgeWindStartDistance = 0;
+      this.resetBridgeCollapse();
+      this.resetPathForks();
+
       // Reset Carpet Logic
       this.carpetMissed = false;
       this.nextCarpetSpawnPos = 0;

@@ -90,6 +90,26 @@ export class MagicChest extends Phaser.GameObjects.Container {
     }
   }
 
+  /** Fizzle on wrong answer: dim + desaturate + stop sparkle, encounter passes without opening. */
+  public dim(durationMs: number = 400, tint: number = 0x555555, targetAlpha: number = 0.4) {
+      if (this.isOpen) return;
+      this.scene.tweens.killTweensOf(this);
+      this.scene.tweens.killTweensOf(this.glow);
+
+      if (this.idleParticles) this.idleParticles.stop();
+
+      [this.bodySprite, this.lidSprite].forEach(spr => {
+          if (spr) spr.setTint(tint);
+      });
+
+      this.scene.tweens.add({
+          targets: [this.bodySprite, this.lidSprite, this.glow],
+          alpha: targetAlpha,
+          duration: durationMs,
+          ease: 'Sine.out'
+      });
+  }
+
   public open(onComplete: () => void) {
       if (this.isOpen) return;
       this.isOpen = true;
@@ -243,7 +263,7 @@ export class MagicChest extends Phaser.GameObjects.Container {
           cl.fillRect(0, 0, 8, 36);
           cl.fillRect(62, 0, 8, 36);
           cl.fillRect(28, 20, 14, 16); // Latch top
-          cl.restore();
+          cl.restore();         
 
           // Highlight
           cl.strokeStyle = 'rgba(255,255,255,0.2)';
@@ -305,7 +325,7 @@ export class MagicChest extends Phaser.GameObjects.Container {
       // --- GLOW ---
       const g = getCtx('chest_glow', 128, 128);
       if (g) {
-          const grd = g.createRadialGradient(64, 64, 10, 64, 64, 60);
+          const grd = g.createRadialGradient(64, 64, 10, 64, 64, 60);   
           grd.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
           grd.addColorStop(1, 'rgba(255, 215, 0, 0)');
           g.fillStyle = grd;

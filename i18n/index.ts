@@ -68,6 +68,11 @@ export function subscribeLanguage(listener: () => void): () => void {
   };
 }
 
+/** True when the string is a known UI key (as opposed to a raw content line). */
+export function isTranslationKey(value: string): value is TranslationKey {
+  return value in translations.en;
+}
+
 /** Translate a key into the current language, filling {placeholders} from params. */
 export function t(key: TranslationKey, params?: Record<string, string | number>): string {
   const template = translations[currentLanguage][key] ?? translations.ar[key] ?? key;

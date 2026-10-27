@@ -44,9 +44,9 @@ export class Foreground {
     this.tunnelTimer += delta;
 
     // --- ZONE CHECK ---
-    // @ts-ignore - access to manager
-    const zone = this.scene.environmentManager ? this.scene.environmentManager.getZone() : 'DESERT';
-    const phase = this.scene.eventManager.eventPhase;
+    const sceneAny = this.scene as { environmentManager?: { getZone: () => string }; eventManager?: { eventPhase: string } };
+    const zone = sceneAny.environmentManager ? sceneAny.environmentManager.getZone() : 'DESERT';
+    const phase = sceneAny.eventManager?.eventPhase ?? 'NONE';
 
     // --- CARPET MODE SPECIAL HANDLING ---
     if (phase === 'CARPET_RIDE') {

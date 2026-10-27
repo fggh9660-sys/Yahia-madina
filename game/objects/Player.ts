@@ -1,6 +1,7 @@
 
 import Phaser from 'phaser';
-import { PHYSICS, getPlayerStartX, getPlayerSpawnY } from '../../constants';
+import { PHYSICS, PERFECT_JUMP, COMBO, BRIDGE_WIND, getPlayerStartX, getPlayerSpawnY, getTouchButtonLayout } from '../../constants';
+import { getCurrentScarfHex, getCurrentVestHex, getCurrentVestDarkHex } from '../../data/playerColor';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   // ... (Keep existing declarations) ...
@@ -33,11 +34,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private jumpKey!: Phaser.Input.Keyboard.Key;
-  
+  private leftKeyA!: Phaser.Input.Keyboard.Key;
+  private rightKeyD!: Phaser.Input.Keyboard.Key;
+
   private jumpBuffer: number = 0;
   private coyoteTime: number = 0;
   private isJumping: boolean = false;
   private isInvulnerable: boolean = false;
+
+  // Apex hang tracking — brief zero-gravity at jump peak for satisfying arc
+  private apexHangTimer: number = 0;
+  private inApexHang: boolean = false;
+  private originalGravityY: number = 0;
+
+  // Perfect-jump apex tap (sub-slice 3) — fires once per jump arc
+  private perfectJumpFiredThisArc: boolean = false;
   
   // Event States
   public isHanging: boolean = false;
@@ -56,14 +67,26 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private isShielded: boolean = false;
   private shieldTimer: number = 0;
   private shieldAura!: Phaser.GameObjects.Sprite;
+
+  private comboAura!: Phaser.GameObjects.Sprite;
+  private comboAuraTier: number = 1;
   
   // Input State
   private isHoldingJump: boolean = false;
-  private wasHoldingJump: boolean = false; 
+  private wasHoldingJump: boolean = false;
+  private isHoldingLeft: boolean = false;
+  private isHoldingRight: boolean = false;
+
+  // Mobile touch UI for L/R drift (mirrors keyboard A/D)
+  private leftTouchButton!: Phaser.GameObjects.Rectangle;
+  private rightTouchButton!: Phaser.GameObjects.Rectangle;
+  private leftTouchIcon!: Phaser.GameObjects.Text;
+  private rightTouchIcon!: Phaser.GameObjects.Text;
 
   // Juice
   private dustEmitter!: Phaser.GameObjects.Particles.ParticleEmitter;
   private ghostTimer: number = 0;
+  private ghosts: Phaser.GameObjects.Sprite[] = [];
   private wasJumpingLastFrame: boolean = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -78,16 +101,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setCollideWorldBounds(true);
     this.setDepth(20);
     this.setGravityY(PHYSICS.GRAVITY);
-    
+    this.originalGravityY = PHYSICS.GRAVITY;
+
     if (this.body) {
         const body = this.body as Phaser.Physics.Arcade.Body;
         body.setSize(30, 75);
-        body.setOffset(48, 28); 
+        body.setOffset(48, 28);
     }
 
     this.initAnimations();
     this.initParticles();
     this.initShieldAura();
+    this.initComboAura();
     this.setupInputs();
     
     // Create Carpet Sprite (Hidden by default)
@@ -246,6 +271,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           scaleX: 0.8, scaleY: 1.2, duration: 150, yoyo: true, ease: 'Sine.easeOut'
       });
       this.coyoteTime = 0;
+      // Reset apex hang so the new arc gets its own hang window
+      this.inApexHang = false;
+      this.apexHangTimer = 0;
+      this.perfectJumpFiredThisArc = false;
   }
 
   private initShieldAura() {
@@ -304,13 +333,138 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       });
   }
 
+  private initComboAura() {
+      this.comboAura = this.scene.add.sprite(this.x, this.y, 'shield_aura');
+      this.comboAura.setDepth(18);
+      this.comboAura.setVisible(false);
+      this.comboAura.setBlendMode(Phaser.BlendModes.ADD);
+      this.comboAura.setAlpha(0);
+
+      this.scene.tweens.add({
+          targets: this.comboAura,
+          angle: -360,
+          duration: 8000,
+          repeat: -1,
+          ease: 'Linear',
+      });
+      this.scene.tweens.add({
+          targets: this.comboAura,
+          scale: { from: 0.95, to: 1.08 },
+          duration: 900,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+      });
+  }
+
+  public setComboAuraTier(tier: number) {
+      this.comboAuraTier = Math.max(1, Math.min(4, tier));
+      const alpha = COMBO.AURA_ALPHA[this.comboAuraTier - 1];
+      const tint = COMBO.TIER_TINTS[this.comboAuraTier - 1];
+
+      if (alpha <= 0) {
+          if (this.comboAura.visible) {
+              this.scene.tweens.add({
+                  targets: this.comboAura,
+                  alpha: 0,
+                  duration: 250,
+                  onComplete: () => this.comboAura.setVisible(false),
+              });
+          }
+          return;
+      }
+
+      this.comboAura.setTint(tint);
+      this.comboAura.setVisible(true);
+      this.scene.tweens.add({
+          targets: this.comboAura,
+          alpha,
+          duration: 220,
+          ease: 'Sine.easeOut',
+      });
+  }
+
   private setupInputs() {
     if (this.scene.input.keyboard) {
         this.cursors = this.scene.input.keyboard.createCursorKeys();
         this.jumpKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+        this.leftKeyA = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+        this.rightKeyD = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
     }
-    this.scene.input.on('pointerdown', () => { this.isHoldingJump = true; });
+
+    this.createTouchButtons();
+
+    // Global tap = jump, but skip if the pointer is on a touch button (so L/R taps don't double as jump)
+    this.scene.input.on('pointerdown', (_pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
+        if (currentlyOver.length > 0) return;
+        this.isHoldingJump = true;
+    });
     this.scene.input.on('pointerup', () => { this.isHoldingJump = false; });
+
+    // Reposition touch buttons when canvas resizes (e.g. orientation change)
+    this.scene.scale.on('resize', this.layoutTouchButtons, this);
+  }
+
+  private createTouchButtons() {
+    const layout = getTouchButtonLayout(this.scene.scale.width, this.scene.scale.height);
+    const BG_COLOR = 0x000000;
+    const BG_ALPHA = 0.22;
+    const STROKE_COLOR = 0xffffff;
+    const STROKE_ALPHA = 0.4;
+
+    this.leftTouchButton = this.scene.add.rectangle(0, 0, layout.size, layout.size, BG_COLOR, BG_ALPHA)
+      .setStrokeStyle(2, STROKE_COLOR, STROKE_ALPHA)
+      .setScrollFactor(0)
+      .setDepth(100)
+      .setInteractive();
+
+    this.leftTouchIcon = this.scene.add.text(0, 0, '◀', {
+        fontSize: `${layout.iconSize}px`,
+        color: '#ffffff',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+
+    this.rightTouchButton = this.scene.add.rectangle(0, 0, layout.size, layout.size, BG_COLOR, BG_ALPHA)
+      .setStrokeStyle(2, STROKE_COLOR, STROKE_ALPHA)
+      .setScrollFactor(0)
+      .setDepth(100)
+      .setInteractive();
+
+    this.rightTouchIcon = this.scene.add.text(0, 0, '▶', {
+        fontSize: `${layout.iconSize}px`,
+        color: '#ffffff',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+
+    this.leftTouchButton.on('pointerdown', () => { this.isHoldingLeft = true; });
+    this.leftTouchButton.on('pointerup', () => { this.isHoldingLeft = false; });
+    this.leftTouchButton.on('pointerout', () => { this.isHoldingLeft = false; });
+
+    this.rightTouchButton.on('pointerdown', () => { this.isHoldingRight = true; });
+    this.rightTouchButton.on('pointerup', () => { this.isHoldingRight = false; });
+    this.rightTouchButton.on('pointerout', () => { this.isHoldingRight = false; });
+
+    this.layoutTouchButtons();
+  }
+
+  private layoutTouchButtons() {
+    if (!this.scene || !this.scene.scale) return;
+    if (!this.leftTouchButton || !this.rightTouchButton) return;
+
+    const layout = getTouchButtonLayout(this.scene.scale.width, this.scene.scale.height);
+    const H = this.scene.scale.height;
+
+    this.leftTouchButton.setSize(layout.size, layout.size);
+    this.rightTouchButton.setSize(layout.size, layout.size);
+    this.leftTouchIcon.setFontSize(layout.iconSize);
+    this.rightTouchIcon.setFontSize(layout.iconSize);
+
+    const cy = H - layout.bottomMargin - layout.size / 2;
+    const leftCx = layout.edgeMargin + layout.size / 2;
+    const rightCx = layout.edgeMargin + layout.size + layout.gap + layout.size / 2;
+
+    this.leftTouchButton.setPosition(leftCx, cy);
+    this.leftTouchIcon.setPosition(leftCx, cy);
+    this.rightTouchButton.setPosition(rightCx, cy);
+    this.rightTouchIcon.setPosition(rightCx, cy);
   }
 
   private initAnimations() {
@@ -411,16 +565,67 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const isTweening = this.scene.tweens.isTweening(this);
     
     const startX = getPlayerStartX(this.scene.scale.width);
+    const sceneAny = this.scene as {
+        eventManager?: {
+            eventPhase?: string;
+            getBridgeWindProgress?: () => number;
+            bridgeGustActive?: boolean;
+        };
+    };
+    const inBridgeWind = sceneAny.eventManager?.eventPhase === 'BRIDGE_WIND';
     if (this.isStruggling && onGround && !isTweening) {
-        const wobble = Math.sin(time * 0.015); 
-        const jitter = (Math.random() - 0.5) * 0.05; 
+        const wobble = Math.sin(time * 0.015);
+        const jitter = (Math.random() - 0.5) * 0.05;
         this.setRotation(0.05 + (wobble * 0.05) + jitter);
-        const stepPush = Math.sin(time * 0.02) * 2; 
-        this.x = startX + stepPush; 
+        const stepPush = Math.sin(time * 0.02) * 2;
+        this.x = startX + stepPush;
+    } else if (inBridgeWind && !isTweening) {
+        // Bridge wind: lateral wind force escalates from base to base*(1+ESCALATION) across segment.
+        const progress = sceneAny.eventManager?.getBridgeWindProgress?.() ?? 0;
+        const escalation = 1 + BRIDGE_WIND.ESCALATION_FACTOR * progress;
+        const gustMult = sceneAny.eventManager?.bridgeGustActive ? BRIDGE_WIND.GUST_FORCE_MULTIPLIER : 1;
+        let vx = BRIDGE_WIND.WIND_FORCE_X * escalation * gustMult;
+        const leftHeld = this.cursors?.left.isDown || this.leftKeyA?.isDown || this.isHoldingLeft;
+        const rightHeld = this.cursors?.right.isDown || this.rightKeyD?.isDown || this.isHoldingRight;
+        if (rightHeld && !leftHeld) vx += BRIDGE_WIND.PLAYER_COUNTER_FORCE;
+        else if (leftHeld && !rightHeld) vx -= BRIDGE_WIND.PLAYER_COUNTER_FORCE * 0.5;
+        body.setVelocityX(vx);
+
+        const offset = this.x - startX;
+        if (offset < -BRIDGE_WIND.X_DRIFT_MAX) {
+            this.x = startX - BRIDGE_WIND.X_DRIFT_MAX;
+            if (body.velocity.x < 0) body.setVelocityX(0);
+        } else if (offset > BRIDGE_WIND.X_DRIFT_MAX) {
+            this.x = startX + BRIDGE_WIND.X_DRIFT_MAX;
+            if (body.velocity.x > 0) body.setVelocityX(0);
+        }
+
+        // Player tilt — visual feedback. Lean in the direction of net velocity.
+        const targetRot = Phaser.Math.Clamp(vx / BRIDGE_WIND.TILT_FACTOR, -BRIDGE_WIND.TILT_MAX, BRIDGE_WIND.TILT_MAX);
+        this.setRotation(Phaser.Math.Linear(this.rotation, targetRot, 0.18));
+    } else if (!onGround && !isTweening) {
+        // Limited mid-air steering — auto-runner identity preserved by capping the offset
+        const leftHeld = this.cursors?.left.isDown || this.leftKeyA?.isDown || this.isHoldingLeft;
+        const rightHeld = this.cursors?.right.isDown || this.rightKeyD?.isDown || this.isHoldingRight;
+
+        if (leftHeld && !rightHeld) body.setVelocityX(-PHYSICS.AIR_NUDGE_SPEED);
+        else if (rightHeld && !leftHeld) body.setVelocityX(PHYSICS.AIR_NUDGE_SPEED);
+        else body.setVelocityX(0);
+
+        const offset = this.x - startX;
+        if (offset < -PHYSICS.AIR_NUDGE_MAX_OFFSET) {
+            this.x = startX - PHYSICS.AIR_NUDGE_MAX_OFFSET;
+            if (body.velocity.x < 0) body.setVelocityX(0);
+        } else if (offset > PHYSICS.AIR_NUDGE_MAX_OFFSET) {
+            this.x = startX + PHYSICS.AIR_NUDGE_MAX_OFFSET;
+            if (body.velocity.x > 0) body.setVelocityX(0);
+        }
     } else {
+        // Grounded: snap back to startX (auto-runner default)
         if (Math.abs(this.x - startX) > 1 && !this.isJumping && !isTweening) {
             this.x = Phaser.Math.Linear(this.x, startX, 0.1);
         }
+        if (onGround) body.setVelocityX(0);
     }
 
     if (this.isShielded) {
@@ -435,6 +640,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             this.isShielded = false;
             this.shieldAura.setVisible(false);
         }
+    }
+
+    if (this.comboAura && this.comboAura.visible) {
+        this.comboAura.setPosition(this.x, this.y);
     }
 
     const isJumpKeyHeld = (this.jumpKey?.isDown) || (this.cursors?.up.isDown) || this.isHoldingJump;
@@ -456,16 +665,56 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.coyoteTime = time + PHYSICS.COYOTE_TIME;
     }
 
-    if (time < this.coyoteTime && time < this.jumpBuffer && !this.isJumping) {
+    if (time < this.coyoteTime && time < this.jumpBuffer && !this.isJumping) {  
         if (!this.isStruggling && !isTweening) {
             this.executeJump();
         }
     }
 
     if (this.canVariableJump) {
-        if (body.velocity.y < -300 && !isJumpKeyHeld) {
-            this.setVelocityY(-300);
+        if (body.velocity.y < PHYSICS.VARIABLE_JUMP_CAP && !isJumpKeyHeld) {
+            this.setVelocityY(PHYSICS.VARIABLE_JUMP_CAP);
         }
+    }
+
+    // --- Apex hang + asymmetric fall curve ---
+    const vy = body.velocity.y;
+    if (!onGround) {
+        // Perfect-jump apex tap (sub-slice 3): tap jump inside apex velocity window for bonus.
+        // Gated by isJumping (so walking off a ledge doesn't qualify) and a once-per-arc flag.
+        if (this.isJumping && wantsToJump && !this.perfectJumpFiredThisArc &&
+            Math.abs(vy) < PERFECT_JUMP.VY_THRESHOLD) {
+            this.perfectJumpFiredThisArc = true;
+            const sc = this.scene as { onPerfectJump?: (x: number, y: number) => void };
+            sc.onPerfectJump?.(this.x, this.y);
+        }
+
+        if (!this.inApexHang && this.apexHangTimer === 0 && Math.abs(vy) < PHYSICS.APEX_VY_THRESHOLD) {
+            this.inApexHang = true;
+            this.apexHangTimer = PHYSICS.APEX_HANG_MS;
+        }
+
+        if (this.inApexHang) {
+            this.apexHangTimer -= delta;
+            body.setGravityY(0);
+            if (this.apexHangTimer <= 0) {
+                this.inApexHang = false;
+                // apexHangTimer stays at <=0 until landing — prevents re-entry mid-jump
+            }
+        } else if (vy > 0) {
+            body.setGravityY(this.originalGravityY * PHYSICS.FALL_GRAVITY_MULTIPLIER);
+        } else if (vy < 0 && !isJumpKeyHeld) {
+            // Rising but jump released — heavier gravity so short hop feels snappy
+            body.setGravityY(this.originalGravityY * PHYSICS.LOW_JUMP_MULTIPLIER);
+        } else {
+            body.setGravityY(this.originalGravityY);
+        }
+    } else {
+        // Grounded — reset apex state and restore base gravity
+        this.inApexHang = false;
+        this.apexHangTimer = 0;
+        this.perfectJumpFiredThisArc = false;
+        body.setGravityY(this.originalGravityY);
     }
 
     if (onGround && Math.abs(body.velocity.x) > 10 && !isTweening) {
@@ -485,10 +734,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
                  if (this.anims.currentAnim?.key !== 'jump' && this.scene.anims.exists('jump')) this.play('jump', true);
              }
         }
-        this.ghostTimer += delta;
-        if (this.ghostTimer > 80) { 
-            this.createGhost();
-            this.ghostTimer = 0;
+        // Don't spawn motion ghosts while the world is frozen (Lost Book modal / event freeze): physics
+        // is paused but update() still runs, so otherwise ghosts pile up at the frozen jump position and
+        // their paused fade-out tweens leave them stuck in the background (Yahia 2026-06-22).
+        if (!this.scene.physics.world.isPaused) {
+            this.ghostTimer += delta;
+            if (this.ghostTimer > 80) {
+                this.createGhost();
+                this.ghostTimer = 0;
+            }
         }
     } else {
         if (this.isStruggling) {
@@ -526,7 +780,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.scene.tweens.add({ targets: this, scaleX: 0.9, scaleY: 1.1, duration: 200, yoyo: true, ease: 'Sine.easeOut' });
     (this.scene as { playJump?: () => void }).playJump?.();
     const scene = this.scene as { onPlayerJump?: () => void };
-    if (typeof scene.onPlayerJump === 'function') scene.onPlayerJump();
+    if (typeof scene.onPlayerJump === 'function') scene.onPlayerJump(); 
   }
 
   private createGhost() {
@@ -538,7 +792,44 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       ghost.setDepth(18);
       ghost.setRotation(this.rotation);
       ghost.setScale(this.scaleX, this.scaleY);
-      this.scene.tweens.add({ targets: ghost, alpha: 0, x: this.x - 30, duration: 300, onComplete: () => ghost.destroy() });
+      this.ghosts.push(ghost);
+      this.scene.tweens.add({
+          targets: ghost, alpha: 0, x: this.x - 30, duration: 300,
+          onComplete: () => {
+              const i = this.ghosts.indexOf(ghost);
+              if (i !== -1) this.ghosts.splice(i, 1);
+              ghost.destroy();
+          },
+      });
+  }
+
+  /** Destroy any lingering motion-trail ghosts and kill their fade tweens. A tweens.pauseAll() during a
+   *  jump (Lost Book modal / event freeze) would otherwise orphan a ghost's fade-out, leaving the copy
+   *  stuck in the background (Yahia 2026-06-22). Call this right before freezing the world. */
+  public clearGhosts() {
+      for (const g of this.ghosts) {
+          this.scene.tweens.killTweensOf(g);
+          g.destroy();
+      }
+      this.ghosts.length = 0;
+      this.ghostTimer = 0;
+  }
+
+  destroy(fromScene?: boolean): void {
+      if (this.scene?.scale) {
+          this.scene.scale.off('resize', this.layoutTouchButtons, this);
+      }
+      // Kill infinite tweens on the aura sprites + dust emitter so they don't keep firing on
+      // destroyed targets after scene shutdown (memory leak across scene.restart()).
+      if (this.scene?.tweens) {
+          if (this.comboAura) this.scene.tweens.killTweensOf(this.comboAura);
+          if (this.shieldAura) this.scene.tweens.killTweensOf(this.shieldAura);
+      }
+      if (this.comboAura?.active) this.comboAura.destroy();
+      if (this.shieldAura?.active) this.shieldAura.destroy();
+      if (this.dustEmitter?.active) this.dustEmitter.destroy();
+      if (this.carpetSprite?.active) this.carpetSprite.destroy();
+      super.destroy(fromScene);
   }
 
   public takeDamage(onComplete: () => void): boolean {
@@ -558,18 +849,46 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       return true;
   }
   
+  /** M3A: regenerate textures with the current player-color choice. Called on player-color change
+   *  to refresh the scarf tint without restarting the scene. */
+  static regenerateTexture(scene: Phaser.Scene) {
+      if (!scene.textures.exists('playerSheet')) {
+          Player.generateTexture(scene);
+          return;
+      }
+      // M3A-R1: re-paint the scarf onto the EXISTING canvas texture in place. Do NOT remove/recreate
+      // mid-run — the live player sprite and its animation frames hold references to this texture's
+      // frames; removing it nulls their glTexture and crashes the WebGL renderer on the next frame.
+      const texture = scene.textures.get('playerSheet') as Phaser.Textures.CanvasTexture;
+      Player.paintSheet(texture);
+  }
+
   static generateTexture(scene: Phaser.Scene) {
       if (scene.textures.exists('playerSheet')) return;
-      // ... (Texture generation logic remains same) ...
-      const FW = 128, FH = 128;
-      const RUN_FRAMES = 16;
-      const TOTAL_FRAMES = 36; 
-      const COLS = 5;
-      const ROWS = 8; 
+      const FW = 128, FH = 128, COLS = 5, ROWS = 8, TOTAL_FRAMES = 36;
       const texture = scene.textures.createCanvas('playerSheet', FW * COLS, FH * ROWS);
       if (!texture) return;
+      Player.paintSheet(texture);
+      for (let i = 0; i < TOTAL_FRAMES; i++) {
+        const col = i % COLS;
+        const row = Math.floor(i / COLS);
+        texture.add(i, 0, col * FW, row * FH, FW, FH);
+      }
+  }
+
+  /** M3A-R1: paint every player frame onto the given canvas texture using the current scarf color.
+   *  Shared by generateTexture (first build) and regenerateTexture (in-place re-paint on color change). */
+  private static paintSheet(texture: Phaser.Textures.CanvasTexture) {
+      const FW = 128, FH = 128;
+      const RUN_FRAMES = 16;
+      const COLS = 5;
       const ctx = texture.context;
-      const P = { SKIN: '#ffdfc4', SKIN_D: '#e0b090', ROBE_L: '#ffffff', ROBE_D: '#e2e2e2', VEST: '#1abc9c', VEST_D: '#16a085', SASH: '#ff4757', GOLD: '#ffd700', SHOES: '#2f3542' };
+      // Clear first so a previous scarf color doesn't bleed through on re-paint.
+      ctx.clearRect(0, 0, texture.width, texture.height);
+      // M3A: scarf color (P.SASH) is dynamic per saved player-color choice. Other palette colors stay fixed.
+      // M3B (Yahia 2026-06-04): chosen color now spans scarf (SASH) + vest/arm trims (VEST/VEST_D) so the
+      // identity reads across multiple outfit elements. Robe/skin/gold/shoes stay fixed (still "simple version").
+      const P = { SKIN: '#ffdfc4', SKIN_D: '#e0b090', ROBE_L: '#ffffff', ROBE_D: '#e2e2e2', VEST: getCurrentVestHex(), VEST_D: getCurrentVestDarkHex(), SASH: getCurrentScarfHex(), GOLD: '#ffd700', SHOES: '#2f3542' };
       
       const drawFrame = (index: number, type: 'run' | 'jump' | 'hang' | 'climb' | 'fall' | 'struggle') => {
         const col = index % COLS;
@@ -643,7 +962,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         ctx.rotate(scarfRot); 
         ctx.fillStyle = P.SASH;
         ctx.beginPath();
-        ctx.moveTo(0, 0);
+        ctx.moveTo(0, 0); 
         ctx.quadraticCurveTo(-20, 5 + scarfWave, -50, -10 + scarfWave);
         ctx.lineTo(-55, 5 + scarfWave);
         ctx.quadraticCurveTo(-20, 20 + scarfWave, 0, 10);
@@ -755,7 +1074,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         } else if (type === 'struggle') {
              ctx.fillRect(3, 1, 4, 1);
         } else {
-             ctx.beginPath(); ctx.arc(4, 1, 1.5, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(4, 1, 1.5, 0, Math.PI*2); ctx.fill(); 
         }
         
         ctx.restore();
@@ -773,13 +1092,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       drawFrame(18, 'climb');
       drawFrame(19, 'fall');
       for (let i = 20; i < 36; i++) drawFrame(i, 'struggle');
-      
+
       texture.refresh();
-      
-      for (let i = 0; i < TOTAL_FRAMES; i++) {
-        const col = i % COLS;
-        const row = Math.floor(i / COLS);
-        texture.add(i, 0, col * FW, row * FH, FW, FH);
-      }
   }
 }

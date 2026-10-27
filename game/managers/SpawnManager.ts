@@ -6,6 +6,10 @@ import { Heart } from '../objects/Heart';
 import { ShieldItem } from '../objects/ShieldItem';
 import { RewardBox } from '../objects/RewardBox';
 import { Obstacle, type ObstacleType } from '../objects/Obstacle';
+import { FallingDebris } from '../objects/FallingDebris';
+import { SpeedBoost } from '../objects/SpeedBoost';
+import { KnowledgeFragment } from '../objects/KnowledgeFragment';
+import { pickLoreFragment, getLostBookIntro } from '../../data/loreFragments';
 import { MerchantCart } from '../objects/MerchantCart';
 import { StackOfRugs } from '../objects/StackOfRugs';
 import { MarketAwning } from '../objects/MarketAwning';
@@ -21,10 +25,32 @@ export class SpawnManager {
   public shieldsGroup!: Phaser.GameObjects.Group;
   public rewardBoxesGroup!: Phaser.GameObjects.Group;
   public obstacles!: Phaser.GameObjects.Group;
+  public fallingDebris!: Phaser.GameObjects.Group;
+  public speedBoosts!: Phaser.GameObjects.Group;
+  public knowledgeFragments!: Phaser.GameObjects.Group;
   public merchantCarts!: Phaser.GameObjects.Group;
   public rugStacks!: Phaser.GameObjects.Group;
-  public marketAwnings!: Phaser.GameObjects.Group; 
+  public marketAwnings!: Phaser.GameObjects.Group;
   public cats!: Phaser.GameObjects.Group;
+  private lastFallingDebrisAt: number = 0;
+  private lastSpeedBoostAt: number = 0;
+  private lastJumpArcTrailAt: number = 0;
+  private lastTrackBonusAt: number = 0;
+  private lastDiscoveryAt: number = 0;
+  private lastFragmentSpawnAt: number = 0;
+  // M2-R2a: Lost Book intro override — first fragment ever spawned in a run is the Lost Book.
+  private hasSpawnedLostBookIntro: boolean = false;
+  private readonly FALLING_DEBRIS_INTERVAL_M = 70;
+  private readonly SPEED_BOOST_INTERVAL_M = 130;
+  private readonly JUMP_ARC_TRAIL_INTERVAL_M = 100;
+  private readonly TRACK_BONUS_INTERVAL_M = 25;
+  // M2-R2 tuned spawn pacing — denser than original baseline (140/320) for visibility during Yahia review,
+  // but not aggressive enough to break flow. Yahia note 3: "more frequent + discovery opportunities".
+  // ~7 fragments per Stage 1 (~600m) at this rate, with 3 rare discoveries.
+  private readonly DISCOVERY_INTERVAL_M = 200;
+  private readonly DISCOVERY_INITIAL_OFFSET_M = 120;
+  private readonly FRAGMENT_INTERVAL_M = 80;
+  private readonly FRAGMENT_INITIAL_OFFSET_M = 60;
 
   private spawnTimer: number = 0;
   public nextSpawnTime: number = 100;
@@ -53,6 +79,12 @@ export class SpawnManager {
     this.shieldsGroup = this.scene.add.group({ classType: ShieldItem, runChildUpdate: false });
     this.rewardBoxesGroup = this.scene.add.group({ classType: RewardBox, runChildUpdate: false });
     this.obstacles = this.scene.add.group({ classType: Obstacle, runChildUpdate: false });
+    this.fallingDebris = this.scene.add.group({ classType: FallingDebris, runChildUpdate: false });
+    FallingDebris.generateTexture(this.scene);
+    this.speedBoosts = this.scene.add.group({ classType: SpeedBoost, runChildUpdate: false });
+    SpeedBoost.generateTexture(this.scene);
+    this.knowledgeFragments = this.scene.add.group({ classType: KnowledgeFragment, runChildUpdate: false });
+    KnowledgeFragment.generateTexture(this.scene);
     this.merchantCarts = this.scene.add.group({ classType: MerchantCart, runChildUpdate: false });
     this.rugStacks = this.scene.add.group({ classType: StackOfRugs, runChildUpdate: false });
     this.marketAwnings = this.scene.add.group({ classType: MarketAwning, runChildUpdate: false });
@@ -69,6 +101,9 @@ export class SpawnManager {
     this.shieldsGroup.clear(true, true);
     this.rewardBoxesGroup.clear(true, true);
     this.obstacles.clear(true, true);
+    this.fallingDebris.clear(true, true);
+    this.speedBoosts.clear(true, true);
+    this.knowledgeFragments?.clear(true, true);
     this.merchantCarts.clear(true, true);
     this.rugStacks.clear(true, true);
     this.marketAwnings.clear(true, true);
@@ -94,6 +129,14 @@ export class SpawnManager {
     updateGroup(this.shieldsGroup);
     updateGroup(this.rewardBoxesGroup);
     updateGroup(this.obstacles);
+    this.fallingDebris.children.each((child: any) => {
+        if (child && child.active && typeof child.scrollWith === 'function') {
+            child.scrollWith(frameMove);
+        }
+        return true;
+    });
+    updateGroup(this.speedBoosts);
+    updateGroup(this.knowledgeFragments);
     updateGroup(this.merchantCarts);
     updateGroup(this.rugStacks);
     updateGroup(this.marketAwnings);
@@ -102,8 +145,9 @@ export class SpawnManager {
     const runDistance = this.scene.getRunDistance();
     const evt = this.scene.eventManager;
     const isSandstorm = evt.eventPhase === 'SANDSTORM_ONSET' || evt.eventPhase === 'SANDSTORM_WALK' || evt.eventPhase === 'SANDSTORM_APPROACH';
+    const isBridge = evt.eventPhase === 'BRIDGE_COLLAPSE' || evt.eventPhase === 'BRIDGE_WIND';
 
-    if (!isSandstorm) {
+    if (!isSandstorm && !isBridge) {
         const groundY = getGroundY(this.scene.scale.height);
         const minAboveGround = 60;
         const maxAboveGround = 280;
@@ -117,19 +161,125 @@ export class SpawnManager {
             const sY = groundY - Phaser.Math.Between(minAboveGround, maxAboveGround);
             this.shieldsGroup.add(new ShieldItem(this.scene, this.scene.scale.width + 100, sY));
         }
+        // Falling debris — only inside the city stage, periodic interval
+        const inCity = this.scene.environmentManager.getZone() === 'CITY';
+        if (inCity && runDistance - this.lastFallingDebrisAt >= this.FALLING_DEBRIS_INTERVAL_M) {
+            this.lastFallingDebrisAt = runDistance;
+            const spawnX = this.scene.scale.width + 200;
+            this.fallingDebris.add(new FallingDebris(this.scene, spawnX, groundY));
+        }
+        // Speed boost pickup — periodic interval, both desert and city. Spawn at jump-arc height.
+        if (runDistance - this.lastSpeedBoostAt >= this.SPEED_BOOST_INTERVAL_M) {
+            this.lastSpeedBoostAt = runDistance;
+            const boostY = groundY - Phaser.Math.Between(100, 180);
+            this.speedBoosts.add(new SpeedBoost(this.scene, this.scene.scale.width + 80, boostY));
+        }
+        // Jump-arc star trail — periodic; only spawns when no obstacles nearby (readability constraint per Yahia).
+        if (runDistance - this.lastJumpArcTrailAt >= this.JUMP_ARC_TRAIL_INTERVAL_M) {
+            if (this.isCurrentlyClear()) {
+                this.lastJumpArcTrailAt = runDistance;
+                this.spawnJumpArcTrail(this.scene.scale.width + 100, groundY);
+            }
+        }
+        // M2 discovery moment: rare hidden lore fragment at jump-arc peak height. Sparse + clear-only.
+        if (runDistance > this.DISCOVERY_INITIAL_OFFSET_M
+            && runDistance - this.lastDiscoveryAt >= this.DISCOVERY_INTERVAL_M) {
+            if (this.isCurrentlyClear()) {
+                this.lastDiscoveryAt = runDistance;
+                this.spawnDiscoveryFragment(this.scene.scale.width + 140, groundY);
+            }
+        }
+        // M2-R1c: regular knowledge fragment spawn with positional variety (air / platform / behind-obstacle / hidden).
+        // Higher frequency than discovery; not flagged isRare so no Noor line, just the lore modal.
+        if (runDistance > this.FRAGMENT_INITIAL_OFFSET_M
+            && runDistance - this.lastFragmentSpawnAt >= this.FRAGMENT_INTERVAL_M) {
+            this.lastFragmentSpawnAt = runDistance;
+            this.spawnRegularFragmentVariant(this.scene.scale.width + 120, groundY);
+        }
+        // M2-R3 (Yahia 2026-05-31): track differentiation block removed alongside Split Path system.
     }
 
     // Desert (INTRO_RUN): show obstacles, stars, boxes etc. from the very start of the run
     const isDesertRun = evt.eventPhase === 'INTRO_RUN' && runDistance >= 0;
     const spawningAllowed = evt.isSpawningAllowed();
 
-    if (isDesertRun || spawningAllowed) {
+    if ((isDesertRun || spawningAllowed) && !isBridge) {
         this.spawnTimer += delta;
         if (this.spawnTimer > this.nextSpawnTime) {
             this.spawnTimer = 0;
             this.spawnPattern(currentSpeed);
         }
     }
+  }
+
+  /** Returns true if there are no obstacles currently in the right half of the screen,
+   *  so a jump-arc trail can spawn without overlapping a hazard cluster. */
+  private isCurrentlyClear(): boolean {
+      const halfW = this.scene.scale.width / 2;
+      let clear = true;
+      this.obstacles.children.each((child: any) => {
+          if (child && child.active && child.x > halfW) clear = false;
+          return true;
+      });
+      this.fallingDebris.children.each((child: any) => {
+          if (child && child.active && child.x > halfW) clear = false;
+          return true;
+      });
+      return clear;
+  }
+
+  /** M2: drop a single knowledge fragment high above ground — visible from default running line
+   *  but only collectible if the player commits to a peak jump. Carries stage-themed lore.
+   *  Flagged isRare=true so pickup fires the Noor "rare discovery" line in addition to the lore modal. */
+  private spawnDiscoveryFragment(startX: number, groundY: number) {
+      const lore = pickLoreFragment(this.scene.getCurrentStage());
+      const y = groundY - 160;
+      this.knowledgeFragments.add(new KnowledgeFragment(this.scene, startX, y, lore.id, true));
+  }
+
+  /**
+   * M2-R1c: regular (non-rare) knowledge fragment with positional variety.
+   * M2-R3 (Yahia 2026-05-31): dropped BEHIND + HIDDEN variants — they made fragments too easy to
+   * miss / appear too close to obstacles. Kept the two visible patterns:
+   *   - AIR     : mid-air at standard jump height (~110px above ground)
+   *   - PLATFORM: slightly higher on a small offset (~140px) — read as "on platform"
+   *
+   * M2-R2a: the very first fragment spawn in a run is overridden to the Lost Book intro
+   * (rare-flagged so it triggers the Noor narration). After that, normal variety resumes.
+   */
+  private spawnRegularFragmentVariant(startX: number, groundY: number) {
+      if (!this.hasSpawnedLostBookIntro) {
+          this.hasSpawnedLostBookIntro = true;
+          const intro = getLostBookIntro();
+          // Place at a clearly visible mid-air position the player will run into naturally.
+          this.knowledgeFragments.add(new KnowledgeFragment(this.scene, startX, groundY - 110, intro.id, true));
+          return;
+      }
+      const lore = pickLoreFragment(this.scene.getCurrentStage());
+      const variants = ['AIR', 'PLATFORM'] as const;
+      const pick = Phaser.Utils.Array.GetRandom(variants as unknown as string[]) as 'AIR' | 'PLATFORM';
+      let x = startX;
+      let y = groundY - 110;
+      if (pick === 'PLATFORM') {
+          y = groundY - 140;
+          x = startX + 30;
+      }
+      this.knowledgeFragments.add(new KnowledgeFragment(this.scene, x, y, lore.id, false));
+  }
+
+  /** Spawn a parabolic arc of stars matching the optimal jump trajectory. Yahia readability
+   *  constraint: only call when the surrounding area is clear of obstacles. */
+  private spawnJumpArcTrail(startX: number, groundY: number) {
+      const count = 7;
+      const arcWidth = 280;
+      const arcHeight = 130;
+      for (let i = 0; i < count; i++) {
+          const t = i / (count - 1);
+          const x = startX + t * arcWidth;
+          // Parabolic curve — peak at t=0.5
+          const y = groundY - 40 - arcHeight * (4 * t * (1 - t));
+          this.stars.add(new Star(this.scene, x, y));
+      }
   }
 
   private spawnPattern(currentSpeed: number) {
@@ -271,6 +421,29 @@ export class SpawnManager {
       this.spawnFlightCollectibles(x, screenH);
   }
 
+  /**
+   * Pass B: incoming-falcon warning chevron at the right edge of the viewport.
+   * Pulses for ~800ms then self-destroys (timed to match the falcon spawn delay).
+   */
+  private createFalconWarning(y: number) {
+      const w = this.scene.scale.width;
+      const warning = this.scene.add.text(w - 36, y, '⚠', {
+          fontSize: '40px',
+          color: '#ff4d4d',
+          fontStyle: 'bold',
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(50);
+
+      this.scene.tweens.add({
+          targets: warning,
+          scale: { from: 0.7, to: 1.2 },
+          alpha: { from: 0.6, to: 1 },
+          duration: 200,
+          yoyo: true,
+          repeat: 3,
+          onComplete: () => warning.destroy(),
+      });
+  }
+
   private spawnSpecific(pattern: string, x: number, groundY: number) {
       this.applySpawnLogic(pattern, x, groundY);
   }
@@ -297,6 +470,12 @@ export class SpawnManager {
                   'SINGLE_ROCK', 'SINGLE_CACTUS', 'SPIKE_TRAP', 'FREE_STARS', 'RISING_PILLAR',
                   'SNAKE_SOLO', 'FALCON', 'PLATFORM_SIMPLE_HOP', 'CRUMBLING_ARCH',
                   'SCORPION_HUNT', 'VIPER_NEST', 'ARFAJ_PATCH'
+              ];
+          } else if (zone === 'OBSERVATORY') {
+              // M3B — Stage 3: telescope is the signature; mix in jump/star beats for readable flow.
+              patterns = [
+                  'TELESCOPE_SOLO', 'SINGLE_ROCK', 'SPIKE_TRAP', 'FREE_STARS',
+                  'PLATFORM_SIMPLE_HOP', 'RISING_PILLAR', 'TELESCOPE_SOLO'
               ];
           } else {
             // CITY PATTERNS
@@ -553,6 +732,12 @@ export class SpawnManager {
               this.addStar(x, groundY - 150);
               baseDelay = 1500;
               break;
+          case 'TELESCOPE_SOLO':
+              // M3B — Stage 3 signature obstacle.
+              this.obstacles.add(new Obstacle(this.scene, x, groundY, 'telescope'));
+              this.addStar(x, groundY - 170);
+              baseDelay = 1700;
+              break;
           case 'SINGLE_CACTUS':
               this.obstacles.add(new Obstacle(this.scene, x, groundY, 'cactus'));
               this.addStar(x, groundY - 150);
@@ -568,11 +753,18 @@ export class SpawnManager {
               this.addStar(x, groundY - 180);
               baseDelay = 1800;
               break;
-          case 'FALCON':
+          case 'FALCON': {
+               // Pass B: off-screen warning chevron pulses for 800ms before the falcon actually enters.
+               // Falcon is the fastest threat (base scroll + 120 px/s modifier), so blind-spawning gave players
+               // no reaction window. Now: warning -> 800ms -> falcon spawn.
                const birdY = groundY - Phaser.Math.Between(120, 180);
-               this.obstacles.add(new Obstacle(this.scene, x, birdY, 'falcon'));
-               baseDelay = 1800;
+               this.createFalconWarning(birdY);
+               this.scene.time.delayedCall(800, () => {
+                   this.obstacles.add(new Obstacle(this.scene, x, birdY, 'falcon'));
+               });
+               baseDelay = 2400;
                break;
+           }
           case 'FREE_STARS':
               for(let i=0; i<5; i++) this.addStar(x + (i*60), groundY - 120 - (Math.sin(i)*40));
               baseDelay = 1800;
@@ -660,6 +852,13 @@ export class SpawnManager {
   }
 
   private addStar(x: number, y: number) {
+      // Clamp Y to the camera's visible area so high-spawned stars (groundY - 350 etc.)
+      // designed for tall desktop viewports don't fall off the top of short mobile screens.
+      const cam = this.scene.cameras?.main;
+      if (cam) {
+          const visibleTop = cam.scrollY + 40;
+          if (y < visibleTop) y = visibleTop;
+      }
       this.stars.add(new Star(this.scene, x, y));
   }
 
@@ -668,6 +867,12 @@ export class SpawnManager {
       this.nextSpawnTime = 100;
       this.lastHeartSpawnAt = 0;
       this.lastShieldSpawnAt = 0;
+      this.lastFallingDebrisAt = 0;
+      this.lastTrackBonusAt = 0;
+      this.lastSpeedBoostAt = 0;
+      this.lastDiscoveryAt = 0;
+      this.lastFragmentSpawnAt = 0;
+      this.hasSpawnedLostBookIntro = false;
       this.spawnCount = 0;
       this.spawnQueue = [];
       this.lastSpawnType = 'NONE';
@@ -678,6 +883,9 @@ export class SpawnManager {
       this.shieldsGroup.clear(true, true);
       this.rewardBoxesGroup.clear(true, true);
       this.obstacles.clear(true, true);
+      this.fallingDebris.clear(true, true);
+      this.speedBoosts.clear(true, true);
+      this.knowledgeFragments?.clear(true, true);
       this.merchantCarts.clear(true, true);
       this.rugStacks.clear(true, true);
       this.marketAwnings.clear(true, true);

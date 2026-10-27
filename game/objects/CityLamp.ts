@@ -12,7 +12,9 @@ export class CityLamp extends Phaser.GameObjects.Container {
     const lamp = scene.add.sprite(0, 0, 'city_street_lamp');
     lamp.setOrigin(0.5, 1);
 
-    const glow = scene.add.image(0, -110, 'city_lamp_glow'); // Local pos relative to container
+    // M2-R2c fix: glow was at y=-110 but the lamp's light glass sits at local y ~-135 (texture y 15-35).
+    // Result was the halo floating ~25px below the visible bulb. Align to the light source.
+    const glow = scene.add.image(0, -135, 'city_lamp_glow'); // Local pos relative to container
     glow.setBlendMode(Phaser.BlendModes.ADD);
     glow.setAlpha(0.6);
     

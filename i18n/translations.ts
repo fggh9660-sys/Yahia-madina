@@ -72,6 +72,7 @@ const ar = {
   'question.princeNoor': 'الأمير نور',
   'question.header': 'سؤال البوابة',
   'question.tryAgain': 'حاول مرة أخرى!',
+  'question.keepGoing': 'واصل التقدم...',
   'question.gateOpening': 'البوابة تفتح...',
   'gameOver.title': 'انتهت اللعبة',
   'gameOver.distance': 'المسافة المقطوعة',
@@ -93,8 +94,10 @@ const ar = {
   // --- Stage names / titles ---
   'stage.desertTitle': 'المرحلة 1 – طريق الصحراء',
   'stage.cityTitle': 'المرحلة 2 – مدخل المدينة',
+  'stage.observatoryTitle': 'المرحلة 3 – برج الرصد',
   'stage.houseOfWisdom': 'بيت الحكمة',
   'stage.desertEnd': 'نهاية الصحراء',
+  'stage.observatory': 'برج الرصد',
 
   // --- Nur guidance messages ---
   'noor.welcome': 'مرحبًا بك في مدينة العلم…\nقد لا تكون الرحلة سهلة،\nلكنني سأكون معك في كل خطوة.',
@@ -216,6 +219,7 @@ const en: Record<TranslationKey, string> = {
   'question.princeNoor': 'Prince Noor',
   'question.header': 'Gate Question',
   'question.tryAgain': 'Try again!',
+  'question.keepGoing': 'Keep going...',
   'question.gateOpening': 'The gate is opening...',
   'gameOver.title': 'Game Over',
   'gameOver.distance': 'Distance Covered',
@@ -237,8 +241,10 @@ const en: Record<TranslationKey, string> = {
   // --- Stage names / titles ---
   'stage.desertTitle': 'Stage 1 – The Desert Road',
   'stage.cityTitle': 'Stage 2 – The City Entrance',
+  'stage.observatoryTitle': 'Stage 3 – The Observatory',
   'stage.houseOfWisdom': 'The House of Wisdom',
   'stage.desertEnd': 'End of the Desert',
+  'stage.observatory': 'The Observatory',
 
   // --- Nur guidance messages ---
   'noor.welcome': 'Welcome to the City of Knowledge…\nThe journey may not be easy,\nbut I will be with you every step of the way.',

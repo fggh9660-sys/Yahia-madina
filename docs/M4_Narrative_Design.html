@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>M4 Narrative Design Document</title>
+<style>
+@page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+* { box-sizing: border-box; }
+body {
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-size: 10.5pt; line-height: 1.55; color: #1f2933;
+  max-width: 100%; margin: 0; padding: 0;
+}
+/* Arabic glyph support */
+:lang(ar), [dir="rtl"] { font-family: "Segoe UI", "Traditional Arabic", "Tahoma", serif; }
+h1 {
+  font-size: 22pt; color: #15324f; margin: 0 0 4pt;
+  border-bottom: 3px solid #c9a227; padding-bottom: 6pt; line-height: 1.2;
+}
+h2 {
+  font-size: 15pt; color: #15324f; margin: 22pt 0 6pt;
+  border-bottom: 1px solid #d6dee6; padding-bottom: 4pt;
+  page-break-after: avoid;
+}
+h3 {
+  font-size: 12pt; color: #1d4ed8; margin: 16pt 0 4pt;
+  page-break-after: avoid;
+}
+h1 + p, h2 + p { margin-top: 4pt; }
+p, li { margin: 4pt 0; }
+strong { color: #0f2436; }
+blockquote {
+  margin: 8pt 0; padding: 6pt 12pt; background: #f6f8fb;
+  border-left: 4px solid #c9a227; color: #2b3a4a; border-radius: 0 4px 4px 0;
+}
+blockquote p { margin: 3pt 0; }
+code {
+  font-family: "Cascadia Code", "Consolas", monospace; font-size: 9pt;
+  background: #eef2f6; padding: 1px 4px; border-radius: 3px; color: #b3306b;
+}
+pre {
+  background: #0f2436; color: #e6edf3; padding: 12pt; border-radius: 6px;
+  overflow-x: auto; font-size: 8.5pt; line-height: 1.4;
+  page-break-inside: avoid; white-space: pre;
+}
+pre code { background: none; color: inherit; padding: 0; font-size: 8.5pt; }
+table {
+  border-collapse: collapse; width: 100%; margin: 10pt 0; font-size: 9pt;
+  page-break-inside: avoid;
+}
+th, td { border: 1px solid #cdd7e1; padding: 5pt 7pt; text-align: left; vertical-align: top; }
+th { background: #15324f; color: #fff; font-weight: 600; }
+tr:nth-child(even) td { background: #f6f8fb; }
+hr { border: none; border-top: 1px solid #d6dee6; margin: 18pt 0; }
+ul, ol { padding-left: 20pt; }
+a { color: #1d4ed8; text-decoration: none; }
+.cover-meta { color: #5b6b7b; font-size: 9.5pt; }
+</style>
+</head>
+<body>
+<h1 id="m4-narrative-design-document-roadmap">M4: Narrative Design Document &amp; Roadmap</h1>
+<p><strong>Project:</strong> Knowledge Runner (working title)
+<strong>Milestone:</strong> M4, The Narrative Loop
+<strong>Status:</strong> Draft for review (not locked yet)
+<strong>Author:</strong> Victor, Script Smelter Studios
+<strong>Date:</strong> 14 June 2026</p>
+<hr />
+<h2 id="0-a-quick-note-before-you-dive-in">0. A quick note before you dive in</h2>
+<p>I've kept two things visibly separate in here so we don't trip over scope later.</p>
+<p>When you see <strong>[M4 SCOPE]</strong>, that's stuff I'm actually committing to build and ship this milestone. Treat it as the contract. When you see <strong>[VISION / FUTURE]</strong>, that's me thinking out loud about where these systems could go in later milestones. It's real design, but it's not part of M4, and I've flagged it so it doesn't quietly creep in.</p>
+<p>Almost nothing here starts from scratch. It sits on top of what the game already has: the lore fragments, Noor's lines and the bond scaffold, the mini-challenges, the collection saving, the three-stage flow. Where something is genuinely new I'll say so; otherwise assume I'm extending what's already in the code.</p>
+<p>Please be rough with this. Cross things out, scribble in the margins, tell me where I'm wrong. The whole reason we're doing M4 on paper first is so we can have that argument now, before I've written a single line of engine code.</p>
+<hr />
+<h2 id="1-the-idea-in-one-breath">1. The idea, in one breath</h2>
+<p>Right now we have a runner with collectibles in it. What I want M4 to do is turn those collectibles into a chain that actually means something.</p>
+<p>The shape of it: you find a torn page, the page asks you something you can't answer yet, you go looking, the world eventually hands you the missing piece, and Noor ties it back to the story. The Lost Book gets one page closer to whole, and that page points you at the next question.</p>
+<p>It's the difference between "I picked up twelve books" and "I'm three pages from finishing the book, and I still have no idea what that seventh page was on about." The second one is what keeps people running.</p>
+<hr />
+<h2 id="2-the-core-loop">2. The core loop</h2>
+<p>This is the part everything else hangs off. If we only agree on one thing in this document, it should be this.</p>
+<pre><code>        ┌─────────────────────────────────────────────────────┐
+        │                                                       │
+        ▼                                                       │
+  [1] LOST BOOK PAGE found in the run                           │
+        │   &quot;A torn page. Half a sentence. It asks something.&quot;  │
+        ▼                                                       │
+  [2] CURIOSITY FRAGMENT opens: the question/mystery           │
+        │   &quot;Why did the astronomers face the qibla to map      │
+        │    the stars?&quot;  ... you don't know yet                │
+        ▼                                                       │
+  [3] KNOWLEDGE FRAGMENT: the answer is out in the world        │
+        │   found later in the run / next run, as a glowing     │
+        │    lore pickup that resolves an open curiosity         │
+        ▼                                                       │
+  [4] NOOR CONNECTS: she links the answer back to the page      │
+        │   &quot;So that's what the page meant. You're reading       │
+        │    the sky the way they did.&quot;                          │
+        ▼                                                       │
+  [5] LOST BOOK updates: page restored, progress visible        │
+        └───────────────────────────────────────────────────────┘
+            and the restored page hints at the NEXT curiosity
+</code></pre>
+<p>A few reasons I keep coming back to this shape.</p>
+<p>It gives the pickups a reason to exist. A Knowledge Fragment stops being "+20 score" and becomes the answer to the thing page four was asking you. That alone changes how it feels to grab one.</p>
+<p>It pulls the player forward. An open question is an itch, and people will start another run mostly to scratch it. We get retention out of curiosity instead of out of a daily-reward Skinner box.</p>
+<p>And practically, once the engine understands the loop, you can author all the new pages, questions and answers in the data files yourself. No engine work to add content, which is the same content-ownership setup we've had since M2.</p>
+<p>It also leans on things we already built rather than replacing them. The lore fragments become the Knowledge half. Noor's line system becomes the connector. The collection-saving layer becomes the Lost Book's ledger.</p>
+<hr />
+<h2 id="3-the-systems-one-at-a-time">3. The systems, one at a time</h2>
+<h3 id="31-lost-book-progression">3.1 Lost Book progression</h3>
+<p>The Lost Book is the player's long-term goal and, mechanically, it's the ledger the whole loop writes to. It's a set of pages, each one torn (a mystery) until the matching Knowledge Fragment puts it back together.</p>
+<p>We've already planted the seed for this. There's a <code>lost-book-intro</code> fragment in the game now with that line about the pages holding secrets you only uncover by collecting them all, and there's a <code>collectionState</code> save layer (<code>kr.collection.v1</code>) tracking which IDs you've found and which milestones you've hit. What M4 does is take that flat list and give it structure: real pages, each with a state.</p>
+<p>Here's the shape I'd add to the editable data files:</p>
+<pre><code class="language-ts">interface LostBookPage {
+  id: string;                 // 'page-01-stars'
+  stage: 1 | 2 | 3;           // where the page is found
+  order: number;              // display order in the book
+  tornLine: string;           // the half-sentence shown when found (the hook)
+  curiosityId: string;        // the question this page opens
+  knowledgeId: string;        // the lore fragment that restores it
+  restoredTitle: string;      // page title once completed
+  restoredBody: string;       // the full lore once restored
+  noorConnectCue: string;     // which Noor line fires on restore
+}
+</code></pre>
+<p>A page moves through four states over its life: undiscovered, then found-but-torn, then curiosity-open, then restored.</p>
+<p>I want a simple Lost Book screen to go with this, reachable from the pause menu and the stage-results screen. Picture a grid of book spines: grey ones you haven't found, cracked-and-faintly-glowing ones that have an open question attached, gold ones you've restored. Tap a restored page and you read its lore; tap a torn one and it reminds you what you're still chasing. This screen is really where retention lives, because it's the place the player can see how close they are and what's still a blank.</p>
+<p>For M4 I'd aim at around twelve pages, four per stage. That's enough to feel like a genuine book without being a slog to build, and you can keep adding to it afterwards.</p>
+<p><strong>[FUTURE]</strong> Down the line this could grow branching pages, "forbidden" pages that need two answers before they unlock, and a final assembled page that triggers the ending cinematic.</p>
+<hr />
+<h3 id="32-curiosity-fragments">3.2 Curiosity Fragments</h3>
+<p>This is the question half of the loop, and it's the piece that makes the rest click. A Curiosity is just an open thread, something the player suddenly wants to know. I'd keep its voice wondering and a little playful, to set it apart from Knowledge, which is matter-of-fact.</p>
+<p>We reserved room for this in the collection layer but never built it; it was always the thing we pushed to M4. So this one's genuinely new.</p>
+<pre><code class="language-ts">interface CuriosityFragment {
+  id: string;                 // 'cur-why-qibla-stars'
+  stage: 1 | 2 | 3;
+  question: string;           // the wonder, in Noor's / the page's voice
+  answeredByKnowledgeId: string;
+  hint?: string;              // optional nudge toward where the answer lives
+}
+</code></pre>
+<p>When a page is found, its Curiosity pops up as a short card that doesn't block the run. I'd reuse the existing fragment-lore modal styling but give it its own look, a question mark, lighter colour, a more curious tone. It then drops into an "Open Curiosities" list you can see in the Lost Book screen.</p>
+<p>The bit I'm most keen on is the pull. While you're carrying an open question, the Knowledge Fragment that answers it glows a little brighter when it shows up, so the world feels like it's responding to what's on your mind. That's the small hit of satisfaction that ties the loop together.</p>
+<p><strong>[FUTURE]</strong> Later we could have curiosities that can only be answered in a different stage, ones on a timer, or even ones the player poses themselves.</p>
+<hr />
+<h3 id="33-knowledge-fragments">3.3 Knowledge Fragments</h3>
+<p>This is the answer half, and honestly it's the system we're in the best shape on already, so I want to extend it rather than touch the foundations.</p>
+<p>What's there today: 26 lore fragments spread across the stages, stage-filtered spawning roughly every 80m, the rare golden variants, the saving, the milestone rewards at 3 / 6 / 10 / 15, and Noor's <code>rare_fragment_discovery</code> reactions. All of it editable in <code>data/loreFragments.ts</code>.</p>
+<p>The only change M4 needs is one optional field:</p>
+<pre><code class="language-ts">interface LoreFragment {
+  // ...existing fields...
+  answersCuriosityId?: string;   // NEW: links an answer back to a question
+}
+</code></pre>
+<p>When you collect a fragment that answers a currently-open curiosity, it does more than show its lore: it kicks off the resolution beat from step four. Noor connects the dots, the page restores, the reward fires. Any fragment without an open curiosity behaves exactly as it does now. Because it's purely additive, the 26 existing fragments keep working untouched and the new linked ones light up the loop.</p>
+<hr />
+<h3 id="34-noors-narrative-chain">3.4 Noor's narrative chain</h3>
+<p>Noor is what stops all of this from feeling like a checklist. She's the one who actually narrates the connection, so when a page comes back together it lands as a story beat instead of a counter ticking up.</p>
+<p>What we have: <code>data/noorLines.ts</code> with eight cues (stage entries, low HP, combo, rare discovery, the lost-book intro, colour discovery) and <code>data/noorBond.ts</code> with a five-tier bond scaffold, thresholds running 30 up to 400, cosmetic and passive keys, and placeholder dialogue. The bond HUD is hidden at the moment, waiting on your redesign, but the scaffolding underneath is all still there.</p>
+<p>There are three things to do here.</p>
+<p>First, the new connector lines, which are the loop's actual voice. I'd add cues for when a curiosity opens, when a knowledge fragment answers one, when a page restores, when the book is nearly done, and when it's complete. These are the lines that make the payoff feel earned, and they're yours to write in <code>noorLines.ts</code>.</p>
+<p>Second, and this is the one I'd really like your read on: I think we should drop the abstract points-based bond meter and pin Noor's progression to the Lost Book instead. Restoring pages <em>is</em> the relationship deepening. Her first real beat opens at three pages, a bit of backstory at six, a turning point around nine, her closing moment at the final page. Right now we'd be asking the player to watch two progress bars that don't talk to each other, and collapsing them into one means a single number carries all the weight.</p>
+<p>Third, the placeholder tiers. Tiers three, four and five in <code>noorBond.ts</code> still say "[Yahia to fill]". Those become the page-restore beats above, so filling them and designing the milestones is the same job.</p>
+<p><strong>[FUTURE]</strong> The cosmetics and passives we scaffolded (scarf colours, a slow-motion ability) stay future work, unless you want one small visible reward to surface in M4. I touch on that in 3.8.</p>
+<hr />
+<h3 id="35-library-progression-and-rewards">3.5 Library progression and rewards</h3>
+<p>The Library in Stage 2, the Bayt al-Hikma, is the obvious home for the Lost Book. It's literally the place pages would be studied and restored, so M4 leans into that and treats it as the loop's anchor location.</p>
+<p>We've already got the Library building, the magic carpet, the mini-challenge sequence and the Stage 2 results screen, with the matching challenges as the main encounter there.</p>
+<p>Two extensions. The Library becomes the in-world spot where the Lost Book screen gets framed properly, Noor at a reading desk, your restored pages laid out. And the Library's rewards get tied to pages: solving a Library challenge can restore a page directly, the studious route, as an alternative to going and finding the field fragment. So there are two ways to close the same question, exploring or solving. The existing rewards stay as they are (15 to 35 stars for correct, a light slowdown for wrong); page-restore just layers on top for challenges that happen to sit on an open curiosity.</p>
+<p><strong>[FUTURE]</strong> Eventually this could become a Library you actually walk around between runs.</p>
+<hr />
+<h3 id="36-discovery-and-mystery">3.6 Discovery and mystery</h3>
+<p>This is the "I wonder what's over there" texture that sits around the loop rather than inside it.</p>
+<p>The <code>MiniEncounterManager</code> already runs seven ambient little vignettes per stage, the wind streaks, fireflies, sand devils, lantern processions, firing every ten to eighteen seconds. Pure mood, nothing blocking, and they respect the rule about keeping the middle 60% of the screen clear.</p>
+<p>For M4 I'd turn a small slice of those moments into actual hooks. Once in a while a distant glow resolves into a hidden page or a rare curiosity, a real "oh, what's that" rather than just decoration. And I'd give a handful of curiosities deliberately vague hints, so their answer isn't obvious and finding it feels like you solved something. The important word is small: most ambient encounters stay pure atmosphere, discovery is the occasional spice, and the centre-of-screen rule holds throughout.</p>
+<p><strong>[FUTURE]</strong> A secret set of pages that only appears under certain conditions, night runs or perfect combos, with lore that reveals itself conditionally.</p>
+<hr />
+<h3 id="37-reward-structure">3.7 Reward structure</h3>
+<p>My one rule here: every reward should feed either the run or the book, and M4's job is mostly to make the book rewards readable.</p>
+<table>
+<thead>
+<tr>
+<th>Reward</th>
+<th>Source</th>
+<th>Feeds</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stars</td>
+<td>pickups, correct challenges, milestones</td>
+<td>run score</td>
+<td>exists</td>
+</tr>
+<tr>
+<td>Hearts</td>
+<td>pickups, milestones</td>
+<td>run survival</td>
+<td>exists</td>
+</tr>
+<tr>
+<td>Shield</td>
+<td>pickups</td>
+<td>run survival</td>
+<td>exists</td>
+</tr>
+<tr>
+<td>Speed boost</td>
+<td>pickups</td>
+<td>run momentum</td>
+<td>exists</td>
+</tr>
+<tr>
+<td>Knowledge Fragment</td>
+<td>field spawns</td>
+<td>book (answers curiosities)</td>
+<td>extend</td>
+</tr>
+<tr>
+<td>Lost Book page restore</td>
+<td>loop completion</td>
+<td>book + Noor arc</td>
+<td>NEW</td>
+</tr>
+<tr>
+<td>Milestone bundles (3/6/10/15)</td>
+<td>collection count</td>
+<td>run + book</td>
+<td>exists, re-tune to pages</td>
+</tr>
+</tbody>
+</table>
+<p>The beats themselves: opening a curiosity is light, a small chime and the question card, just enough to register the itch. Finding the answer to an open one is the big moment, the golden burst, Noor's connector line, the page knitting itself back together in the book, a star arc. And every few pages there's a book milestone, a Noor beat plus something tangible like an extra starting heart.</p>
+<p>The balance I'd push for is generous, frequent run rewards (that's the fun floor that keeps moment-to-moment play good) and rarer, earned book rewards (that's the pull). The thing to avoid is making the book feel grindy. Twelve pages should come together over a handful of focused runs, not fifty.</p>
+<hr />
+<h3 id="38-long-term-retention">3.8 Long-term retention</h3>
+<p>The honest, shippable version for M4 leans on a few things.</p>
+<p>The biggest one is free once the loop exists: open curiosities are themselves the reason to come back. An unanswered question is a reason to run again, and we don't have to build anything extra to get it. On top of that I'd put a Lost Book completion percentage on the menu and results screen, the classic "you're at 8 of 12, go finish it" nudge. And I'd add one permanent unlock for finishing the book or hitting a milestone, something small but yours forever; my suggestion is either a Noor cosmetic like the gold scarf or a +1 starting heart, both of which the bond-tier scaffold in <code>noorBond.ts</code> already supports. One visible "your progress stuck to you" reward is plenty for this milestone. Underneath it all, the book and curiosity state needs to persist across sessions, which is just extending the localStorage we already use, so the book is always waiting where you left it.</p>
+<p><strong>[VISION / FUTURE]</strong> explicitly not M4, but worth having on record so we both know where this could go: a daily curiosity or daily page, cross-device save sync (which needs a backend, so it's out for a client-only build), a full Noor wardrobe, new chapters as recurring content drops, leaderboards and streaks. None of these are in the M4 contract. They're just what the foundation makes possible.</p>
+<hr />
+<h3 id="39-stage-integration">3.9 Stage integration</h3>
+<p>The loop runs across all three stages, with each one giving its pages and answers a different flavour.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Theme</th>
+<th>Pages (~4 each)</th>
+<th>Curiosity flavour</th>
+<th>Answers from</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. Desert / Heritage</td>
+<td>Bedouin sky-reading, oasis, caravan</td>
+<td>star navigation, the oasis, caravan routes</td>
+<td>"How did they cross with no map?"</td>
+<td>desert Knowledge Fragments</td>
+</tr>
+<tr>
+<td>2. City / Bayt al-Hikma</td>
+<td>Golden-age science, the Library</td>
+<td>translation, the astrolabe, the House of Wisdom</td>
+<td>"Who wrote the page I'm holding?"</td>
+<td>Library challenges + city fragments</td>
+</tr>
+<tr>
+<td>3. Observatory</td>
+<td>Astronomy, constellations, Al-Sufi</td>
+<td>star catalogues, moon phases, the qibla</td>
+<td>"Why map the heavens at all?"</td>
+<td>observatory fragments, final page</td>
+</tr>
+</tbody>
+</table>
+<p>A couple of rules that hold it together. Pages are found in their home stage, but a curiosity you open in Stage 1 can be answered in Stage 2 or 3. That cross-stage thread is what makes a full playthrough feel connected rather than like three separate games stitched end to end. And Stage 3's final pages assemble into the closing page that triggers the ending: Noor's last line, the book made whole. That gives Stage 3 a genuine narrative climax, which also feeds straight into the bar you set about Stage 3 needing to feel like a clear step up. It's the payoff stage for the entire loop. None of this touches the existing transitions mechanically, the desert-gate-city-carpet-ascent-observatory chain stays as it is; M4 just lays the book and curiosity beats over the top.</p>
+<hr />
+<h3 id="310-what-a-real-run-looks-like">3.10 What a real run looks like</h3>
+<p>Easiest way to show the loop working is to walk one through, start to finish.</p>
+<p>You start in the desert. Around 60m Noor does her intro and the Lost Book intro page appears with that line about secrets only revealed by collecting them all. That beat already exists; now it's framed as page zero.</p>
+<p>A bit further on, 180m or so, you find page two, torn: "They never lost their way, because they read the…" and the sentence just stops. A curiosity opens, "How did the caravans cross the desert with no map?", and it goes onto your open list. Noor: "A good question. Keep your eyes on the sky."</p>
+<p>At 320m a Knowledge Fragment spawns, glowing brighter than the usual ones because it answers a question you're already carrying. You grab it: "Bedouin navigators steered by the fixed stars, the sky was their map." The resolution beat fires, golden burst, Noor connects it back ("So that's what the page meant, the stars themselves"), page two knits back together in gold, stars arc up to the counter. What the player feels in that moment is simple: I asked something, the world answered, my book grew.</p>
+<p>Then in Stage 2 you open page five, torn, with a curiosity about who actually wrote these pages, but the answer isn't in reach this run. So it stays open, nagging at you.</p>
+<p>Which is why you start run two partly just to close it. In Stage 2 you solve the Library challenge tied to it and the page restores through the studious route instead. You cross six restored pages, which trips a book milestone, so Noor opens up a little more and you keep a permanent extra heart.</p>
+<p>By run three or four you're in the Observatory chasing the last pages. The closing page assembles, Noor gets her final line, the book is whole, the ending plays, and the menu ticks over to 100%.</p>
+<p>That whole arc, find, wonder, discover, connect, grow, run again, is the M4 experience in a sentence.</p>
+<hr />
+<h2 id="4-where-i-need-your-call">4. Where I need your call</h2>
+<p>These are the decisions I'd genuinely like you to weigh in on before we lock anything.</p>
+<ol>
+<li>Noor's progression. Are you happy folding the abstract bond-points meter into the Lost Book milestones? I'm fairly strongly for it, one number that means everything, but it's your character so it's your call.</li>
+<li>Page count. Twelve (four a stage) feels right to me for shipping plus leaving you room to expand. More, fewer?</li>
+<li>The permanent unlock. Gold scarf, or +1 starting heart? Or one at each of two milestones?</li>
+<li>The Library studious route. Do you want page-restore-via-challenge as an alternative to finding it in the field, or would you rather keep the two systems apart?</li>
+<li>Cross-stage threads. Comfortable with a Stage 1 curiosity being answered in Stage 2 or 3? It's the connective tissue, but it does ask for a bit more care when authoring.</li>
+<li>The Curiosity-vs-Knowledge tone. Curiosity in a wondering voice, Knowledge plain and factual. Does that split sit right with you?</li>
+</ol>
+<hr />
+<h2 id="5-what-m4-actually-covers">5. What M4 actually covers</h2>
+<p><strong>[M4 SCOPE]</strong> the build:</p>
+<ol>
+<li>The core loop engine, page → curiosity → knowledge answer → Noor connect → restore.</li>
+<li>The Lost Book screen (pause and results), with around twelve authored pages across the three stages.</li>
+<li>The Curiosity Fragments system, the open-curiosities list, and the answer-glow pull.</li>
+<li>The Knowledge Fragment extension (<code>answersCuriosityId</code>) and the resolution beat.</li>
+<li>Noor's connector cues, collapsing the bond into page milestones, and filling the placeholder beats.</li>
+<li>The Library page-link integration (one route).</li>
+<li>Discovery hooks, the occasional page or curiosity surfacing from an ambient glow, kept light.</li>
+<li>Page-linked reward beats plus one permanent unlock.</li>
+<li>The Stage 3 closing page and the ending beat.</li>
+<li>Persisting book and curiosity state, with completion percentage on the menu.</li>
+<li>The iOS / Safari pass and demo build, carried over from the original M4 line.</li>
+</ol>
+<p><strong>[VISION / FUTURE]</strong> explicitly not in M4: daily content, cross-device sync, a full Noor wardrobe, new chapters, leaderboards, conditional secret page-sets, a walkable Library hub.</p>
+<p>One thing that doesn't change: all the new content (pages, curiosities, answers, Noor lines) lives in the editable <code>data/*.ts</code> files. You write the content, the engine code stays put.</p>
+<hr />
+<h2 id="6-my-recommendation">6. My recommendation</h2>
+<p>If we lock one thing first, make it the core loop in section 2 and the twelve-page structure in 3.1 and 3.9. That's the irreducible heart of M4. Everything else in section 3 is a layer sitting on that spine, and we can tune any of it in review without disturbing the foundation.</p>
+<p>The single decision that matters most is the first one in section 4, collapsing Noor's bond into the book. If we go that way, M4 becomes one clean progression instead of two competing ones. It's simpler to build, simpler to feel, and it makes the Lost Book the actual soul of the game.</p>
+<p>Send me your marks on section 4 and anything you'd add, and I'll roll it all into a v2 and lock the final scope.</p>
+</body>
+</html>

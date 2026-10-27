@@ -40,7 +40,15 @@ export class LibraryBuilding extends Phaser.GameObjects.Container {
     });
 
     this.setDepth(15); // Behind player (20), but in front of bg
-    // Adjusted scale since the new texture is larger (700px high)
-    this.setScale(1.0); 
+    // Responsive scale. The exterior texture is 600px wide with a SOLID dark archway centre
+    // (unlike CityGate, whose centre is a transparent cutout). At a fixed 1.0 scale on a narrow
+    // portrait phone (iPhone Safari ≈ 390px) the building is ~1.5× the viewport, so its dark
+    // archway fills the whole playfield and hides the floor/path as it slides in on approach
+    // (reported by Yahia 2026-06-19). Cap the building to ~65% of viewport width; never upscale
+    // past the native 1.0 so desktop/wide layouts stay unchanged.
+    const BASE_TEXTURE_WIDTH = 600;
+    const MAX_VIEWPORT_FRACTION = 0.65;
+    const fitScale = Math.min(1.0, (scene.scale.width * MAX_VIEWPORT_FRACTION) / BASE_TEXTURE_WIDTH);
+    this.setScale(fitScale);
   }
 }
